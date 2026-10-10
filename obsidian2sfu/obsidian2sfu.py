@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -32,9 +33,18 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
+
+def _config_dir() -> Path:
+    """Config folder: %APPDATA%/sfu on Windows, ~/.config/sfu elsewhere."""
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming")
+        return Path(base) / "sfu"
+    return Path.home() / ".config" / "sfu"
+
+
 TOOL_DIR = Path(__file__).resolve().parent
 DEFAULT_TITLE = TOOL_DIR / "title_reference.docx"
-DEFAULT_CONFIG = Path.home() / ".config" / "sfu" / "obsidian2sfu.json"
+DEFAULT_CONFIG = _config_dir() / "obsidian2sfu.json"
 DEFAULT_VAULT = Path.home() / "obsidian_backup"
 # `sfu-converter` lives next to the Python interpreter that runs this script.
 DEFAULT_CONVERTER = str(Path(sys.executable).with_name("sfu-converter"))
