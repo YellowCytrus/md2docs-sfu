@@ -1,203 +1,141 @@
-# SFU Converter — конвертер TXT в DOCX по стандарту СФУ
+# md2docs-sfu
 
-SFU Converter превращает структурированный текстовый файл (`.txt`) в документ
-`.docx`, оформленный по стандарту Сибирского федерального университета
-(СФУ, СТУ 7.5-07). Вы пишете содержимое простыми текстовыми маркерами, а
-конвертер сам расставляет шрифты, поля, отступы, нумерацию, титульный лист,
-подписи к рисункам и таблицам, список источников и формулы.
+Конвертер заметок **Obsidian (Markdown) → документы Word по оформлению СФУ**
+(СТУ 7.5-07). Из markdown-заметки с вложениями собирается `.txt` в синтаксисе V2
+и затем `.docx`:
 
-Что умеет конвертер:
+```
+заметка.md (+ вложения)  →  заметка.txt (V2)  →  заметка.docx (+ .pdf)
+```
 
-- Несколько профилей оформления (лабораторные, курсовые, ВКР, отчёты по практике и др.).
-- Автоматический титульный лист и нумерация страниц.
-- Заголовки четырёх уровней, таблицы, рисунки, формулы, списки, сноски.
-- Библиография по ГОСТ и перекрёстные ссылки между объектами.
-- Проверка готового документа и диагностика ошибок в исходнике.
+Что получается в документе:
 
-## ВАЖНО!
-> Для сквозной генерации отчётов нужен
-> DOCX-шаблон, в котором уже есть корректный титульный лист и содержание.
-> В этом режиме конвертер не создаёт титульный лист и ToC автоматически, а
-> добавляет только основное содержимое отчёта.
+- титульный лист из шаблона с подстановкой ваших данных (ФИО, группа, кафедра, тема, преподаватель);
+- настоящее поле Word «Содержание» с отточием;
+- нумерация **таблиц и рисунков по разделам** — `1.1`, `2.3`, в приложениях `А.1`, `Б.2`
+  (структурные разделы — ВВЕДЕНИЕ, СОДЕРЖАНИЕ, СПИСОК ИСТОЧНИКОВ — не учитываются);
+- списки и таблицы как Word-сущности, Times New Roman 14 pt, поля по СТУ;
+- иллюстрации одинаковой ширины, симметрично полям, с отбивкой по строке сверху/снизу;
+- список источников перед приложениями.
 
-> Пока генерация титульников и ToC не готова до конца и может не соответсовать СТУ
-
-> Используйте `--skip-generated-front-matter`
-
-
-## Содержание
-
-- [Краткий обзор](#sfu-converter--конвертер-txt-в-docx-по-стандарту-сфу)
-- [Рабочие процессы](#рабочие-процессы)
-  - [Flow 1 — веб-чат (ручной)](docs/workflow-web.md)
-  - [Flow 2 — ИИ-агент (автоматический)](docs/workflow-agent.md)
-- [Установка](#установка)
-  - [Установка по агентам](docs/installation.md)
-- [Быстрый старт](#быстрый-старт)
-- [Команды CLI](#команды-cli)
-- [Документация по стандарту и roadmap](#документация-по-стандарту-и-roadmap)
-- [Профили оформления](#профили-оформления)
-- [Разработка](#разработка)
-
-## Рабочие процессы
-
-Сгенерировать документ можно двумя способами:
-
-- **Flow 1 — веб-чат (ручной).** Скопируйте один готовый промпт
-  [`prompts/SFU_WEB_PROMPT.md`](prompts/SFU_WEB_PROMPT.md) в любой веб-чат с ИИ (Claude, ChatGPT,
-  Gemini …). Он спросит тип документа и метаданные, выдаст `.txt` в синтаксисе V2, а вы
-  сконвертируете его командами `sfu-converter`. Пошагово — [docs/workflow-web.md](docs/workflow-web.md).
-- **Flow 2 — ИИ-агент (автоматический).** Агент (Claude Code, Codex, OpenCode, Gemini CLI) сам
-  пишет `.txt`, прогоняет lint, исправляет ошибки и конвертирует в `.docx`. Пошагово —
-  [docs/workflow-agent.md](docs/workflow-agent.md).
-
-Оба способа спрашивают, **кто пишет первые разделы** (Цель/Задачи/Введение): вы даёте текст или ИИ
-генерирует его из темы. Установка для каждого агента — [docs/installation.md](docs/installation.md).
+---
 
 ## Установка
 
-Рекомендуемый способ — изолированная установка через [pipx](https://pipx.pypa.io):
+Нужен только **Python 3.10+** (и Git для клонирования). Установщик сам проверяет,
+что уже стоит, и **спрашивает разрешение** перед установкой отсутствующих системных
+пакетов (apt/dnf/pacman/zypper/brew — Linux, winget — Windows).
+
+### Linux / macOS
 
 ```bash
-pipx install sfu-converter
-# до выхода на PyPI — прямо из репозитория:
-# pipx install git+https://github.com/bounchich1/sfu_converter
-sfu-converter --help
+git clone https://github.com/YellowCytrus/md2docs-sfu.git
+cd md2docs-sfu
+./install.sh
 ```
 
-Это всё, что нужно для конвертации `.txt → .docx`. Интеграция с ИИ-агентами (`sfu-converter agents
-install` для Claude Code и Codex, `AGENTS.md`/`GEMINI.md` для остальных) и полная матрица установки по
-инструментам — в [docs/installation.md](docs/installation.md). Установка для разработки конвертера — в
-разделе [Разработка](#разработка).
+### Windows (PowerShell)
 
-## Быстрый старт
+```powershell
+git clone https://github.com/YellowCytrus/md2docs-sfu.git
+cd md2docs-sfu
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
 
-1. Создайте файл `report.txt` с разметкой версии 2:
+Неинтерактивно: `SFU_ASSUME_YES=1 ./install.sh` или `.\install.ps1 -Yes`.
 
-   ```text
-   [DOC syntax=2 profile=lab_practical_project_reports language=ru]
-   [META key=title value="Отчёт по лабораторной работе"]
-   [META key=student value="Иванов И. И."]
-   [META key=group value="КИ22-01"]
+Установщик создаёт `.venv`, ставит пакет (`pip install -e .`), кладёт команду
+`obsidian2sfu` в PATH и создаёт конфиг.
 
-   [H level=1 title="Введение"]
-   [P] Цель работы — разработать REST API для каталога товаров.
+---
 
-   [H level=1 title="Заключение"]
-   [P] Поставленные цели достигнуты.
-   ```
-
-2. Проверьте исходник на ошибки:
-
-   ```bash
-   sfu-converter lint --input report.txt --syntax-version 2
-   ```
-
-3. Сгенерируйте документ:
-
-   ```bash
-    sfu-converter convert --input report.txt --output report.docx --profile lab_practical_project_reports --syntax-version 2 --template template1.docx --skip-generated-front-matter
-   ```
-
-## Команды CLI
+## Запуск
 
 ```bash
-sfu-converter <команда> [параметры]
+# Linux / macOS
+obsidian2sfu "Универ/Сети/Отчёт.md"
+
+# Windows
+obsidian2sfu "Универ\Сети\Отчёт.md"
 ```
 
-| Команда           | Назначение                                  |
-|-------------------|---------------------------------------------|
-| `convert`         | Преобразовать TXT в DOCX (или PPTX)         |
-| `validate-docx`   | Проверить готовый DOCX по профилю           |
-| `parse`           | Разобрать TXT в AST (JSON)                  |
-| `lint`            | Проверить синтаксис TXT и правила профиля   |
-| `list-profiles`   | Показать доступные профили оформления       |
-| `explain-syntax`  | Вывести справку по синтаксису               |
-| `export-schema`   | Экспортировать JSON-схемы                    |
-| `export-coverage` | Вывести матрицу покрытия стандарта          |
-| `agents`          | Установить скиллы в AI-агенты (Claude, Codex)|
+Путь можно давать относительно хранилища (`--vault`, по умолчанию
+`~/obsidian_backup`) или абсолютным. Рядом появятся `Отчёт.docx`, `Отчёт.txt`,
+папка `images/` и PDF-превью (если установлен LibreOffice + poppler).
 
-Частые флаги: `--syntax-version 2`, `--profile <имя>`, `--strict`
-(предупреждения как ошибки), `--output-format pptx`,
-`--template <путь>` (шаблон титульного листа),
-`--skip-generated-front-matter` (не создавать титульный лист и содержание).
+Флаги: `--out`, `--vault`, `--config ФАЙЛ`, `--set КЛЮЧ=ЗНАЧЕНИЕ`,
+`--sources-file`, `--title-template`, `--no-pdf`.
 
+---
 
-## Документация по стандарту и roadmap
+## JSON-конфиги
 
-Полное описание синтаксиса версии 2 разбито на тематические страницы в папке
-[`docs/`](docs/):
+Метаданные титульника берутся по приоритету: значения по умолчанию → общий конфиг
+→ конфиг заметки → `--config` → `--set`.
 
-Сводные материалы по стандарту и развитию проекта: `docs/sfu-standard-coverage-matrix.md`
-и `docs/technical requirements/08_migration_roadmap.md`.
+**Общий конфиг:**
 
-- [Обзор и структура документа](docs/v2-overview.md) — `[DOC]`, `[META]`,
-  правила атрибутов, общий каркас файла.
-- [Текст и заголовки](docs/v2-text.md) — `[H]`, `[STRUCTURAL]`, `[P]`,
-  выделение текста, `[RAW]`.
-- [Объекты: рисунки, таблицы, списки, формулы](docs/v2-objects.md) —
-  `[FIGURE]`, `[TABLE]`, `[LIST]`, `[FORMULA]`.
-- [Ссылки, сноски и источники](docs/v2-references.md) — `[REF]`, `[FN]`,
-  `[SOURCE]`, библиография по ГОСТ.
-- [Расширенные блоки](docs/v2-extensions.md) — `[SECTION]`, `[APPENDIX]`,
-  `[ABBREVIATIONS]`, `[DESIGNATION]`, графические материалы и слайды.
-- [Диагностика и проверки](docs/v2-diagnostics.md) — коды ошибок, строгий
-  режим, предупреждение о кириллице в маркерах.
-- [Профили оформления](docs/v2-profiles.md) — список профилей и их выбор.
+- Linux/macOS: `~/.config/sfu/obsidian2sfu.json`
+- Windows: `%APPDATA%\sfu\obsidian2sfu.json`
 
-Готовый демонстрационный файл со всеми возможностями:
-[`examples/converter_v2_showcase_report.txt`](examples/converter_v2_showcase_report.txt).
+**Конфиг заметки** — файл рядом с `.md` (например, `Отчёт.sfu.json`),
+подхватывается автоматически.
 
-## Профили оформления
+```json
+{
+  "meta": {
+    "document_type": "ОТЧЕТ О ПРАКТИЧЕСКОЙ РАБОТЕ №2",
+    "title": "Задание 2",
+    "student": "Иванов И. И.",
+    "group": "КИ23-14Б",
+    "record_book": "032319377",
+    "teacher": "Д. В. Зябликов",
+    "institute": "Институт космических и информационных технологий",
+    "department": "Информационные системы и технологии",
+    "city": "Красноярск",
+    "year": "2026"
+  },
+  "sources": ["Источник 1", "Источник 2"]
+}
+```
+
+| Ключ `meta` | На титульнике |
+|-------------|----------------|
+| `document_type` | вид работы |
+| `title` | тема (в кавычках) |
+| `student`, `group`, `record_book` | студент, группа, зачётка |
+| `teacher` | преподаватель |
+| `institute`, `department` | институт, кафедра |
+| `city`, `year` | город, год |
+
+Разовое переопределение:
 
 ```bash
-sfu-converter list-profiles --format json
+obsidian2sfu "Отчёт.md" --set title="Другая тема" --set year=2027
 ```
 
-| Профиль                               | Назначение                                |
-|---------------------------------------|-------------------------------------------|
-| `common`                              | Общие базовые правила                      |
-| `lab_practical_project_reports`       | Лабораторные, практические, проектные      |
-| `practice_reports`                    | Отчёты по практике                         |
-| `research_reports`                    | Отчёты о НИР                               |
-| `coursework`                          | Курсовые проекты и работы                  |
-| `graduation_qualification_work`       | ВКР (выпускная квалификационная работа)    |
-| `small_written_works`                 | Рефераты, контрольные, РГЗ, эссе           |
-| `graphic_and_demonstration_materials` | Графические и демонстрационные материалы   |
-| `project_designations`                | Обозначения проектов                       |
+---
 
-Подробнее — в [docs/v2-profiles.md](docs/v2-profiles.md).
-
-## Разработка
-
-```bash
-git clone https://github.com/bounchich1/sfu_converter
-cd sfu_converter
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-source .venv/bin/activate     # macOS / Linux
-pip install -e ".[dev]"
-
-python -m pytest                                                              # тесты
-python -m pytest --cov=sfu_converter --cov-branch --cov-report=term-missing   # покрытие
-```
-
-В режиме разработки команда доступна и как `sfu-converter`, и как `python -m sfu_converter.cli`.
-Портативные инструкции для агентов: `AGENTS.md` — источник правды, `GEMINI.md` генерируется из него
-командой `python tools/sync_agent_docs.py` (проверка в CI — `--check`).
-
-Структура проекта:
+## Структура
 
 ```
-src/sfu_converter/
-  cli.py              # точка входа CLI
-  parser/             # парсер TXT версии 2
-  domain/             # узлы AST, правила оформления, диагностика
-  application/        # сценарии композиции и конвертации
-  infrastructure/     # рендерер DOCX, валидатор, титульные листы
-  registry/           # реестр профилей и правил
-  tools/              # проверка кириллицы в маркерах
-docs/                 # вики и требования к оформлению
-examples/             # примеры TXT-файлов
-templates/            # шаблоны DOCX
+install.sh / install.ps1     установщики (Linux/macOS, Windows)
+toolkit/                     инструкция и шаблон конфига
+obsidian2sfu/                утилита + эталонный титульник + README
+src/                         конвертер sfu_converter (с доработками оформления)
 ```
+
+## Требования
+
+| Компонент | Зачем | Обязателен |
+|-----------|-------|------------|
+| Python 3.10+ | конвертер | да |
+| Git | клонирование | для установки |
+| LibreOffice | PDF-превью | нет |
+| poppler (`pdftotext`) | номера страниц в содержании | нет |
+
+Без LibreOffice/poppler DOCX всё равно собирается — номера страниц в содержании
+пересчитает Word по `Ctrl+A, F9`.
+
+Подробности — в [toolkit/README.md](toolkit/README.md) и
+[obsidian2sfu/README.md](obsidian2sfu/README.md).
