@@ -1,0 +1,47 @@
+SECTION 1: orientation=PORTRAIT (0) size=21.59x27.94cm margins=2.00/1.00/2.00/3.00cm
+P style="Normal" text="МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ"
+  R text="МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="СИБИРСКИЙ ФЕДЕРАЛЬНЫЙ УНИВЕРСИТЕТ"
+  R text="СИБИРСКИЙ ФЕДЕРАЛЬНЫЙ УНИВЕРСИТЕТ" bold=1 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Институт космических и информационных технологий"
+  R text="Институт космических и информационных технологий" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Кафедра программной инженерии"
+  R text="Кафедра программной инженерии" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="УТВЕРЖДАЮ"
+  R text="УТВЕРЖДАЮ" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Заведующий кафедрой ____________ Сидоров С. С."
+  R text="Заведующий кафедрой ____________ Сидоров С. С." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="«25» мая 2026 г."
+  R text="«25» мая 2026 г." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="МАГИСТЕРСКАЯ ДИССЕРТАЦИЯ"
+  R text="МАГИСТЕРСКАЯ ДИССЕРТАЦИЯ" bold=1 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Эталонный документ профиля graduation_qualification_work"
+  R text="Эталонный документ профиля graduation_qualification_work" bold=1 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="по направлению 09.04.01 Информатика и вычислительная техника"
+  R text="по направлению 09.04.01 Информатика и вычислительная техника" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="по магистерской программе 09.04.01-01 Высокопроизводительные вычисления"
+  R text="по магистерской программе 09.04.01-01 Высокопроизводительные вычисления" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Научный руководитель, доцент ____________ Петров П. П."
+  R text="Научный руководитель, доцент ____________ Петров П. П." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Рецензент ____________ Кузнецов К. К."
+  R text="Рецензент ____________ Кузнецов К. К." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Выпускник ____________ Иванов И. И."
+  R text="Выпускник ____________ Иванов И. И." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Красноярск 2026"
+  R text="Красноярск 2026" bold=0 italic=0 underline=0 font=Times New Roman size=14

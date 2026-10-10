@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sfu-converter.local/schemas/diagnostics.json",
+  "title": "SFU Converter Diagnostic",
+  "type": "object",
+  "required": ["code", "severity", "message", "ruleId", "source", "data"],
+  "properties": {
+    "code": {"type": "string"},
+    "severity": {"enum": ["error", "warning", "info", "fatal"]},
+    "message": {"type": "string"},
+    "ruleId": {"type": ["string", "null"]},
+    "source": {
+      "type": "object",
+      "required": ["document", "section", "lineStart", "lineEnd"],
+      "properties": {
+        "document": {"type": ["string", "null"]},
+        "section": {"type": ["string", "null"]},
+        "lineStart": {"type": ["integer", "null"]},
+        "lineEnd": {"type": ["integer", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "data": {"type": "object"},
+    "target": {"type": "string"},
+    "suggestion": {"type": "string"}
+  },
+  "additionalProperties": true
+}

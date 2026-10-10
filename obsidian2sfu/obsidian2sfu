@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# obsidian2sfu launcher. Resolves its own location so it works through a
+# symlink in ~/.local/bin. Expects the layout:
+#   <project>/obsidian2sfu/obsidian2sfu.py   (this script)
+#   <project>/.venv/...                       (virtualenv)
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+DIR="$(dirname "$SELF")"
+PROJECT="$(dirname "$DIR")"
+exec "$PROJECT/.venv/bin/python" "$DIR/obsidian2sfu.py" "$@"

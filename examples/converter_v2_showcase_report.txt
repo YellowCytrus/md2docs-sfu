@@ -1,0 +1,240 @@
+[DOC syntax=2 profile=lab_practical_project_reports language=ru]
+[META key=university value="Сибирский федеральный университет"]
+[META key=institute value="Институт космических и информационных технологий"]
+[META key=department value="Кафедра программной инженерии"]
+[META key=document_type value="ОТЧЕТ ПО ЛАБОРАТОРНОЙ РАБОТЕ"]
+[META key=discipline value="Инструменты подготовки учебной документации"]
+[META key=title value="Showcase возможностей SFU Converter и парсера TXT v2"]
+[META key=student value="Иванов И. И."]
+[META key=group value="КИ22-01Б"]
+[META key=teacher value="Петров П. П."]
+[META key=supervisor value="Петров П. П."]
+[META key=supervisor_title value="доцент"]
+[META key=record_book value="123456"]
+[META key=city value="Красноярск"]
+[META key=year value="2026"]
+[META key=total_pages value="24"]
+[META key=project_designation value="ДП-23.05.02-2026 ABCDEF.001 Э1 ПЗ"]
+
+[TITLE_PAGE]
+[DESIGNATION prefix=ДП specialty=23.05.02 group=ABCDEF.001 document=ПЗ year=2026 schema=Э1]
+
+[ABBREVIATIONS]
+[ABBR short=AST long="абстрактное синтаксическое дерево"]
+[ABBR short=CLI long="командный интерфейс"]
+[ABBR short=DOCX long="формат Office Open XML для текстовых документов"]
+[ABBR short=PPTX long="формат Office Open XML для презентаций"]
+[ABBR short=SFU long="Siberian Federal University formatting standard"]
+| TXT | текстовый исходный файл с разметкой |
+| GOST | государственный стандарт оформления |
+[ABBREVIATIONS_END]
+
+[STRUCTURAL title="РЕФЕРАТ"]
+[P] В отчете представлен обзор реализованных возможностей SFU Converter и парсера TXT версии 2. Документ одновременно служит демонстрационным исходным файлом: в нем используются метаданные, титульный лист, обозначение проекта, заголовки четырех уровней, абзацы с **жирным** и *курсивным* начертанием, таблицы, рисунки, списки, формулы, ссылки, сноски, список сокращений, библиография, приложения, секции с другим форматом листа, графические материалы, плакаты, слайды и raw-блоки.
+[P] В тексте намеренно присутствуют ссылки на источники [1; 2, с. 15; 3; 4; 5], чтобы проверить работу структурированных библиографических записей и встроенного анализатора цитирований.
+
+[STRUCTURAL title="СОДЕРЖАНИЕ"]
+
+[STRUCTURAL title="ВВЕДЕНИЕ"]
+[P] SFU Converter преобразует структурированный TXT-файл в документ DOCX, применяя правила профилей СФУ: поля страницы, Times New Roman, межстрочный интервал, отступ первой строки, стили заголовков, подписи таблиц и рисунков, оформление формул, сносок, приложений и списка источников. Парсер TXT v2 делает исходный файл предсказуемым: каждый блок задается явным маркером, а параметры передаются через атрибуты key=value.
+[P] В отличие от устаревшего синтаксиса, версия 2 требует явных маркеров `[P]` для абзацев и `[H level=...]` для заголовков. Это снижает неоднозначность, позволяет получать AST в JSON и дает стабильную основу для CLI-команд `parse`, `lint`, `convert` и `validate-docx`.
+
+[H level=1 title="Возможности конвертера" number=auto]
+[H level=2 title="Командный интерфейс и режимы работы" number=auto]
+[P] Реализованный CLI поддерживает конвертацию TXT в DOCX, отдельную проверку готового DOCX, разбор TXT в AST, линтинг синтаксиса и профильных правил, вывод списка профилей, объяснение синтаксиса, экспорт JSON-схем и экспорт матрицы покрытия стандарта. Для автоматизации доступны JSON-ответы, строгий режим, тихий режим, выбор версии синтаксиса, выбор профиля и настройка шаблона.
+
+[TABLE caption="Команды CLI" id=tbl:cli header=true]
+| Команда | Назначение | Основной результат |
+| convert | Преобразует TXT в DOCX или PPTX | Готовый файл и диагностика |
+| validate-docx | Проверяет существующий DOCX | Диагностика оформления |
+| parse | Возвращает AST документа | JSON-структура блоков |
+| lint | Проверяет TXT без генерации файла | Сводка синтаксиса и правил |
+| list-profiles | Показывает доступные профили | Имена профилей и метаданные |
+| explain-syntax | Описывает маркеры TXT | Справка по версии синтаксиса |
+| export-schema | Экспортирует JSON-схемы | ast, diagnostics, profiles, results |
+| export-coverage | Выводит матрицу покрытия | Markdown или JSON |
+[TABLE_NOTE marker="*" text="Для демонстрационного отчета выбран профиль lab_practical_project_reports, так как отдельного профиля с именем report в реестре нет."]
+[TABLE_END]
+
+[P] Таблица команд приведена выше (таблица tbl:cli). Явная ссылка тем же объектом задается отдельным маркером:
+[REF target=tbl:cli]
+
+[H level=2 title="Профили и правила оформления" number=auto]
+[P] Конвертер содержит реестр профилей: common, lab_practical_project_reports, practice_reports, research_reports, coursework, graduation_qualification_work, small_written_works, graphic_and_demonstration_materials и project_designations. Профиль определяет набор правил, обязательные метаданные, форму титульного листа и дополнительные проверки.
+[P] Поддерживаются автоматические титульные листы, нумерация страниц с пропуском номера на первой странице, оглавление через структурный раздел СОДЕРЖАНИЕ, автоматическое распознавание разделов ВВЕДЕНИЕ, ЗАКЛЮЧЕНИЕ, СПИСОК СОКРАЩЕНИЙ и СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ, а также валидация порядка структурных частей.
+
+[LIST type=numbered]
+[1)] Выбрать профиль и указать его в `[DOC syntax=2 profile=...]`.
+[2)] Заполнить метаданные, необходимые для титульного листа.
+[3)] Описать содержимое через явные блоки TXT v2.
+[4)] Запустить `lint` для диагностики исходника.
+[5)] Запустить `convert` для получения DOCX или PPTX.
+[LIST_END]
+
+[H level=2 title="Рендеринг содержимого" number=auto]
+[P] Рендерер обрабатывает обычные абзацы, структурные разделы, нумерованные заголовки, списки, изображения, таблицы, формулы, сноски, библиографию, приложения, специальные секции листа, листы чертежей, плакаты и слайдовые материалы. Для рисунков путь разрешается относительно папки `images`, а для шаблонов поддерживаются режимы append, preserve-prefix и replace-body.
+
+[FIGURE src="implementation_overview.png" caption="Общая схема конвертера и v2-парсера" id=fig:overview explanatory="1 — TXT v2\n2 — parser\n3 — AST\n4 — renderer\n5 — DOCX/PPTX" sheet=1 total_sheets=1]
+[P] На рисунке показан типовой маршрут обработки исходника (рисунок fig:overview). Явная ссылка на тот же рисунок:
+[REF target=fig:overview]
+
+[H level=1 title="Возможности парсера TXT версии 2" number=auto]
+[H level=2 title="Блоки верхнего уровня" number=auto]
+[P] Парсер v2 распознает декларацию документа, метаданные, титульный лист, проектное обозначение, структурированные заголовки H1-H4, абзацы, рисунки, таблицы, списки, формулы, ссылки, источники, сноски, секции, разрывы страниц, приложения, графические листы, плакаты, слайдовые наборы, список сокращений и raw-блоки.
+
+[TABLE caption="Маркеры TXT v2" id=tbl:v2-markers header_rows=2 column_units="-,-,-"]
+| Группа | Маркер | Назначение |
+| Документ | [DOC], [META], [TITLE_PAGE], [DESIGNATION] | Метаданные, профиль, титульный лист и обозначение |
+| Текст | [H], [P], [RAW] | Заголовки, абзацы и экранирование служебных строк |
+| Объекты | [FIGURE], [TABLE], [FORMULA], [LIST] | Рисунки, таблицы, формулы и списки |
+| Ссылки | [REF], [SOURCE], [FN], [FN_ANCHOR], [FN_BODY] | Перекрестные ссылки, источники и сноски |
+| Расширения | [SECTION], [APPENDIX], [DRAWING], [POSTER], [SLIDE_DECK] | Специальные листы, приложения и демонстрационные материалы |
+[TABLE_NOTE marker="**" text="Строка-разделитель Markdown внутри таблицы не требуется: парсер читает строки с вертикальными чертами до TABLE_END."]
+[TABLE_END]
+
+[P] Перечень маркеров в таблице является проверяемым объектом (таблица tbl:v2-markers). Явная ссылка:
+[REF target=tbl:v2-markers]
+
+[H level=2 title="Абзацы и встроенные элементы" number=auto]
+[P role=example] Абзац может хранить произвольные атрибуты, например `role=example`. Внутри текста поддерживаются **полужирные фрагменты**, *курсивные фрагменты*, библиографические цитаты [2, с. 15] и сноски [FN id=1 text="Inline-сноска создается сразу как якорь и тело сноски."].
+[P] Раздельная форма сноски также поддерживается: в абзаце ставится якорь [FN_ANCHOR id=2], а тело сноски описывается отдельным блоком.
+[FN_BODY id=2]
+Тело сноски может занимать несколько строк и хранится отдельно от основного абзаца.
+[/FN_BODY]
+
+[H level=2 title="Таблицы, списки и вложенность" number=auto]
+[P] Таблицы поддерживают подпись, идентификатор, единицы измерения, число строк заголовка, пометки продолжения, единицы по колонкам и примечания. Списки поддерживают bullet, numbered и lettered, а вложенный список связывается с предыдущим пунктом.
+
+[TABLE caption="Параметры расширенной таблицы" id=tbl:table-options number=auto unit="шт." continuation=continuation header_rows=1 column_units="-,-,шт."]
+| Параметр | Поддержка | Пример |
+| caption | да | Подпись таблицы |
+| id | да | tbl:table-options |
+| header_rows | да | 1 |
+| column_units | да | -, -, шт. |
+[TABLE_NOTE marker="*" text="Атрибут continuation может принимать значения continuation или final."]
+[TABLE_END]
+
+[P] Расширенная таблица показана как отдельный объект (таблица tbl:table-options). Явная ссылка:
+[REF target=tbl:table-options]
+
+[LIST type=lettered level=1]
+[а)] Явный буквенный пункт.
+[LIST type=numbered level=2]
+[1)] Вложенный нумерованный пункт.
+[2)] Второй вложенный нумерованный пункт.
+[LIST_END]
+[б)] Второй буквенный пункт.
+[LIST_END]
+
+[H level=2 title="Формулы и обозначения" number=auto]
+[P] Формулы поддерживают идентификатор, авто-нумерацию, пояснения символов, переносы длинных выражений и последовательные формулы без лишнего интервала.
+
+[FORMULA id=eq:quality number=auto]
+Q = (C + R + V) / 3
+[FORMULA_SYMBOL name=Q text="интегральная оценка готовности документа"]
+[FORMULA_SYMBOL name=C text="полнота покрытия синтаксиса"]
+[FORMULA_SYMBOL name=R text="устойчивость парсинга"]
+[FORMULA_SYMBOL name=V text="валидируемость результата"]
+[FORMULA_END]
+[FORMULA_EXPLANATION] где Q — итоговая оценка, C — полнота, R — устойчивость, V — проверяемость
+
+[FORMULA id=eq:coverage number=auto consecutive_with=eq:quality]
+C = parsed_blocks / declared_blocks
+[FORMULA_SYMBOL name=C text="" repeats=true]
+[FORMULA_END]
+
+[P] Формулы доступны для ссылок через идентификаторы (формула (eq:quality)) и (формула (eq:coverage)).
+[REF target=eq:quality]
+[REF target=eq:coverage]
+
+[H level=2 title="Глубина заголовков" number=auto]
+[H level=3 title="Раздел с подпунктами" number=auto]
+[H level=4 title="Первый подпункт" number=auto]
+[P] H4 используется для детальной структуры внутри пункта, если профиль допускает такую глубину.
+[H level=4 title="Второй подпункт" number=auto]
+[P] Наличие двух подпунктов демонстрирует правило качества заголовков, при котором одиночный подпункт не считается полноценным делением.
+
+[H level=1 title="Секции и демонстрационные материалы" number=auto]
+[H level=2 title="Секция с другим форматом листа" number=auto]
+[P] Маркер SECTION задает ориентацию, формат листа, рамку и форму основной надписи для вложенного фрагмента.
+
+[SECTION orientation=landscape sheet=A3 frame=text_following form=form_3]
+[P] Этот абзац находится внутри A3 landscape секции с рамкой text_following и формой form_3.
+[TABLE caption="Вложенная таблица в секции"]
+| Объект | Назначение |
+| SectionSetupNode | Настройка листа |
+| FrameType | Выбор рамки |
+[TABLE_END]
+[/SECTION]
+
+[H level=2 title="Графические листы, плакаты и слайды" number=auto]
+[P] Для профилей графических и демонстрационных материалов v2-парсер создает узлы DrawingSheetNode, PosterNode и SlideDeckNode. Даже в отчете эти блоки полезны как smoke-тест рендера дополнительных материалов.
+
+[DRAWING sheet=A1 frame=graphic form=form_5 scale="1:50"]
+src="implementation_overview.png"
+designation=ДП-23.05.02 ABCDEF.001 Э3
+font=type_A
+[/DRAWING]
+
+[POSTER format=A1 title="Плакат архитектуры конвертера" fill=75]
+[P] Плакат демонстрирует маршрут TXT v2 -> AST -> DOCX/PPTX и показывает, что вложенные блоки внутри POSTER разбираются тем же парсером.
+[/POSTER]
+
+[SLIDE_DECK format=A4]
+[SLIDE first_slide=true title="Showcase SFU Converter" student="Иванов И. И." supervisor="Петров П. П." fill=80]
+university="Сибирский федеральный университет"
+institute="Институт космических и информационных технологий"
+city="Красноярск"
+year=2026
+Ключевые возможности: TXT v2, профили, диагностика, DOCX, PPTX.
+[/SLIDE]
+[SLIDE title="Showcase SFU Converter" fill=82]
+Parser v2 covers metadata, sections, tables, formulas, references, sources and demonstration materials.
+[/SLIDE]
+[/SLIDE_DECK]
+
+[H level=1 title="Диагностика и проверяемость" number=auto]
+[P] Парсер сообщает коды диагностики для неизвестных маркеров, повторяющихся идентификаторов, отсутствующих закрывающих маркеров, неверных атрибутов, несовпадающей формы таблицы, неподдерживаемой версии синтаксиса, кириллических lookalike-символов в маркерах и недопустимого уровня заголовка. Конвертер дополнительно проверяет композицию документа, обязательные метаданные, обозначения, правила заголовков, графические материалы, стиль, единицы измерения, ссылки и библиографию.
+
+[RAW]
+[THIS_IS_LITERAL_TEXT]
+Строки внутри RAW не интерпретируются как маркеры TXT v2.
+[/THIS_IS_LITERAL_TEXT]
+[RAW_END]
+
+[STRUCTURAL title="ЗАКЛЮЧЕНИЕ"]
+[P] Демонстрационный файл показывает полный маршрут от исходного TXT v2 до форматированного результата: профильный титульный лист, основное содержание, справочные материалы, ссылки, сноски и список источников. Использование явных маркеров делает исходник пригодным для автоматического разбора, линтинга, конвертации и последующей проверки документа.
+[P] Приложение с матрицей покрытия упоминается в тексте как структурный элемент (см. приложение А).
+[REF target=app:a]
+
+[STRUCTURAL title="СПИСОК СОКРАЩЕНИЙ"]
+
+[STRUCTURAL title="СПИСОК ИСТОЧНИКОВ"]
+[SOURCE number=1 type=normative lang=ru]
+title="СТУ 7.5-07-2024 Работы выпускные квалификационные, проекты и работы курсовые"
+city="Красноярск" publisher="СФУ" year=2024
+[/SOURCE]
+[SOURCE number=2 type=book_two_authors lang=ru]
+authors="Иванов И. И., Петров П. П."
+title="Автоматизация подготовки учебной документации"
+city="Красноярск" publisher="СФУ" year=2023 pages=320
+[/SOURCE]
+[SOURCE number=3 type=article lang=ru]
+authors="Петров П. П., Сидоров С. С."
+title="Проверка структурированных текстовых документов"
+journal="Вестник СФУ" year=2022 number=4 pages=12-18
+[/SOURCE]
+[SOURCE number=4 type=electronic lang=ru]
+title="Документация проекта SFU Converter"
+url=https://github.com/Nikita2005qwe/sfu_converter
+accessed=06.06.2026
+[/SOURCE]
+[SOURCE number=5] Python Software Foundation. Python Documentation. — URL: https://docs.python.org/3/ (дата обращения: 06.06.2026).
+[REF target=source:1]
+[REF target=source:2]
+[REF target=source:3]
+[REF target=source:4]
+[REF target=source:5]
+
+[PAGE_BREAK]
+[APPENDIX id=app:a letter="А" title="ПРИЛОЖЕНИЕ А" type="справочное" subtitle="Матрица покрытия showcase-файла" sheet=A4 independent=false]

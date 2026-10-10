@@ -1,0 +1,79 @@
+[DOC syntax=2 profile=small_written_works]
+[META key=university value="Сибирский федеральный университет"]
+[META key=institute value="Институт космических и информационных технологий"]
+[META key=department value="Кафедра программной инженерии"]
+[META key=title value="Эталонный документ профиля small_written_works"]
+[META key=subject value="Инженерия программного обеспечения"]
+[META key=student value="Иванов И. И."]
+[META key=group value="КИ22-01Б"]
+[META key=supervisor value="Петров П. П."]
+[META key=supervisor_title value="доцент"]
+[META key=teacher value="Сидоров С. С."]
+[META key=document_type value="РЕФЕРАТ"]
+[META key=discipline value="Тестирование программ"]
+[META key=record_book value="123456"]
+[META key=city value="Красноярск"]
+[META key=year value="2026"]
+[META key=project_designation value="ДП-23.05.02-2026 ABCDEF.001 Э1 ПЗ"]
+[META key=direction_code value="09.04.01"]
+[META key=direction_name value="Информатика и вычислительная техника"]
+[META key=master_program_code value="09.04.01-01"]
+[META key=master_program_name value="Высокопроизводительные вычисления"]
+[META key=master_program value="09.04.01-01 Высокопроизводительные вычисления"]
+[META key=program_head value="Главов Г. Г."]
+[META key=department_head value="Сидоров С. С."]
+[META key=approval_date value="«25» мая 2026 г."]
+[META key=reviewer value="Кузнецов К. К."]
+[META key=practice_place value="ООО «Практика»"]
+[META key=university_supervisor value="Петров П. П."]
+[META key=enterprise_supervisor value="Заводов З. З."]
+[META key=consultants value="Иванова А. А.; Сидорова Б. Б."]
+[META key=norm_controller value="Контролёров Н. Н."]
+[META key=specialty_code value="10.05.03"]
+[META key=specialty_name value="Информационная безопасность"]
+[META key=total_pages value="24"]
+[TITLE_PAGE]
+[DESIGNATION prefix=ДП specialty=23.05.02 group=ABCDEF.001 document=ПЗ year=2026 schema=Э1]
+[ABBREVIATIONS]
+[ABBR short=CLI long="командный интерфейс"]
+[ABBR short=DOCX long="формат Office Open XML"]
+[ABBREVIATIONS_END]
+[H level=1 title="РЕФЕРАТ"]
+[P] Эталонный документ проверяет командный интерфейс (CLI), формат Office Open XML (DOCX), титульный лист, ссылки и список источников.
+[H level=1 title="СОДЕРЖАНИЕ"]
+[H level=1 title="ВВЕДЕНИЕ"]
+[P] Текст введения описывает цель проверки и содержит ссылки на источники [1, с. 15; 2, с. 20].
+[H level=1 title="Основная часть" number=auto]
+[H level=2 title="Модель данных" number=auto]
+[H level=3 title="Алгоритм обработки" number=auto]
+[H level=4 title="Шаг проверки" number=auto]
+[P quantity=time] Выполнение операции занимает 12 с на тестовом стенде.
+[TABLE caption="Результаты профиля" id=tbl:profile unit="с" continuation=continuation column_units="-,с"]
+| Показатель | Значение |
+| Время | 12 |
+[TABLE_NOTE marker="*" text="Измерение приведено для тестового стенда."]
+[TABLE_END]
+[FIGURE src="test_image.jpg" caption="Архитектура решения" id=fig:architecture explanatory="1 — CLI\n2 — DOCX" sheet=1 total_sheets=2]
+[FORMULA id=eq:score number=auto]
+Q = a + b
+[FORMULA_SYMBOL name=Q text="итоговая оценка"]
+[FORMULA_SYMBOL name=a text="показатель полноты"]
+[FORMULA_SYMBOL name=b text="показатель устойчивости"]
+[FORMULA_END]
+[P] Объекты сверяются по ссылкам (см. рисунок fig:architecture), (таблица tbl:profile), (формула (eq:score)) и (см. приложение А).
+[P] Сноска фиксирует примечание [FN id=1 text="Текст сноски для эталонной проверки." ].
+[H level=1 title="ЗАКЛЮЧЕНИЕ"]
+[P] Проверка подтверждает стабильный маршрут преобразования.
+[H level=1 title="СПИСОК СОКРАЩЕНИЙ"]
+[H level=1 title="СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ"]
+[SOURCE number=1 type=book_two_authors lang=ru]
+authors="Иванов И. И., Петров П. П."
+title="Анализ данных"
+city="Красноярск" publisher="СФУ" year=2023 pages=320
+[/SOURCE]
+[SOURCE number=2 type=article lang=ru]
+authors="Петров П. П., Сидоров С. С."
+title="Проверка документов"
+journal="Вестник СФУ" year=2021 number=4 pages=12-18
+[/SOURCE]
+[APPENDIX title="ПРИЛОЖЕНИЕ" type="справочное" subtitle="Контрольный лист" independent=true]

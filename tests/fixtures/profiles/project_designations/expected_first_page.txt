@@ -1,0 +1,43 @@
+SECTION 1: orientation=PORTRAIT (0) size=21.59x27.94cm margins=2.00/1.00/2.00/3.00cm
+P style="Normal" text="МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ"
+  R text="МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="СИБИРСКИЙ ФЕДЕРАЛЬНЫЙ УНИВЕРСИТЕТ"
+  R text="СИБИРСКИЙ ФЕДЕРАЛЬНЫЙ УНИВЕРСИТЕТ" bold=1 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Институт космических и информационных технологий"
+  R text="Институт космических и информационных технологий" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Кафедра программной инженерии"
+  R text="Кафедра программной инженерии" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="ИНЖЕНЕРИЯ ПРОГРАММНОГО ОБЕСПЕЧЕНИЯ"
+  R text="ИНЖЕНЕРИЯ ПРОГРАММНОГО ОБЕСПЕЧЕНИЯ" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Эталонный документ профиля project_designations"
+  R text="Эталонный документ профиля project_designations" bold=1 italic=0 underline=0 font=Times New Roman size=16
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Руководитель, доцент ____________ Петров П. П."
+  R text="Руководитель, доцент ____________ Петров П. П." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Студент КИ22-01Б ____________ Иванов И. И."
+  R text="Студент КИ22-01Б ____________ Иванов И. И." bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text=""
+  R text="" bold=0 italic=0 underline=0 font=Times New Roman size=14
+P style="Normal" text="Красноярск 2026"
+  R text="Красноярск 2026" bold=0 italic=0 underline=0 font=Times New Roman size=14

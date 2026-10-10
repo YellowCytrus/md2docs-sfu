@@ -1,0 +1,59 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - name: Verify built version matches release tag
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          tag = "${{ github.event.release.tag_name }}"
+          expected = tag[1:] if tag.startswith("v") else tag
+          wheels = list(Path("dist").glob("sfu_converter-*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected one wheel, found {len(wheels)}: {[wheel.name for wheel in wheels]}")
+          match = re.match(r"^sfu_converter-(?P<version>[^-]+)-", wheels[0].name)
+          if not match:
+              raise SystemExit(f"Could not parse wheel version from {wheels[0].name}")
+          actual = match.group("version")
+          if actual != expected:
+              raise SystemExit(f"Built version {actual} does not match release tag {tag}")
+      - name: Smoke-test built wheel
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/sfu-converter --help
+          /tmp/smoke/bin/python -c "import sfu_converter; print(sfu_converter.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

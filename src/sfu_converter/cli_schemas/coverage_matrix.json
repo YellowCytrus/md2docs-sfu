@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sfu-converter.local/schemas/coverage-matrix.json",
+  "title": "SFU Converter Coverage Matrix",
+  "type": "object",
+  "required": ["rows"],
+  "properties": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "ruleId",
+          "profiles",
+          "sourceDoc",
+          "sourceSection",
+          "severity",
+          "parserSupport",
+          "rendererStatus",
+          "validatorStatus",
+          "testModules"
+        ],
+        "properties": {
+          "ruleId": {"type": "string"},
+          "profiles": {"type": "array", "items": {"type": "string"}},
+          "sourceDoc": {"type": "string"},
+          "sourceSection": {"type": "string"},
+          "severity": {"type": "string"},
+          "parserSupport": {"type": "boolean"},
+          "rendererStatus": {"type": "string"},
+          "validatorStatus": {"type": "string"},
+          "testModules": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

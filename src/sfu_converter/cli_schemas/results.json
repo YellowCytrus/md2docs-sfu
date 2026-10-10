@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sfu-converter.local/schemas/results.json",
+  "title": "SFU Converter Result Envelope",
+  "type": "object",
+  "required": ["ok", "command", "diagnostics"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "command": {"type": "string"},
+    "inputs": {"type": "object"},
+    "outputs": {"type": "object"},
+    "profile": {"type": "string"},
+    "syntaxVersion": {"type": "integer"},
+    "durationMs": {"type": "integer"},
+    "diagnostics": {"type": "array"},
+    "summary": {"type": "object"}
+  },
+  "additionalProperties": true
+}

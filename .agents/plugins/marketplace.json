@@ -1,0 +1,20 @@
+{
+  "name": "sfu-converter",
+  "interface": {
+    "displayName": "SFU Converter"
+  },
+  "plugins": [
+    {
+      "name": "sfu-converter",
+      "source": {
+        "source": "local",
+        "path": "./plugins/sfu-converter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

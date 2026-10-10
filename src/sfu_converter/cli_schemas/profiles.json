@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sfu-converter.local/schemas/profiles.json",
+  "title": "SFU Converter Profile List",
+  "type": "object",
+  "required": ["ok", "command", "profiles", "total"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "command": {"const": "list-profiles"},
+    "profile": {"type": "string"},
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "displayName",
+          "sourceDocs",
+          "ruleCount",
+          "rendererSupport",
+          "validatorSupport",
+          "unsupportedRendererRuleIds",
+          "unsupportedValidatorRuleIds",
+          "requiredMetadata",
+          "titlePageForm"
+        ],
+        "properties": {
+          "name": {"type": "string"},
+          "displayName": {"type": "string"},
+          "sourceDocs": {"type": "array", "items": {"type": "string"}},
+          "ruleCount": {"type": "integer"},
+          "rendererSupport": {"type": "integer"},
+          "validatorSupport": {"type": "integer"},
+          "unsupportedRendererRuleIds": {"type": "array", "items": {"type": "string"}},
+          "unsupportedValidatorRuleIds": {"type": "array", "items": {"type": "string"}},
+          "requiredMetadata": {"type": "array", "items": {"type": "string"}},
+          "titlePageForm": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "total": {"type": "integer"}
+  },
+  "additionalProperties": true
+}

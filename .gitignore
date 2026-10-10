@@ -1,0 +1,87 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# === Виртуальное окружение ===
+.venv/
+venv/
+ENV/
+env/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Логи и результаты (генерируемые) ===
+logs/
+results/
+*.log
+
+# === Покрытие тестами ===
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
+
+# === Разовые артефакты сборки/скриншоты ===
+output.png
+
+# === Бэкапы от скриптов ===
+*.backup
+*.txt.backup
+
+# === Временные файлы ===
+tmp/
+.tmp/
+.codex_tmp_deps/
+.worktrees/
+worktrees/
+temp/
+*.tmp
+
+# === Agent install artifacts ===
+.agents/skills/
+skills-lock.json
+
+# === Тестовые изображения (если большие) ===
+# images/*.png
+# images/*.jpg
+
+# === obsidian2sfu: личные конфиги конкретных работ (не публиковать) ===
+obsidian2sfu/*.json
+
+# === Секреты (если будут) ===
+.env
+*.key
+*.pem
+/.pytest_tmp/
+/.pytmp/
+/.pt_tmp/
+/dist_verify/

@@ -1,0 +1,40 @@
+{
+  "name": "sfu-converter",
+  "version": "0.1.0",
+  "description": "Single-skill Codex plugin for Siberian Federal University (СФУ) academic documents. Routes document types, generates V2 TXT, lints, fixes, and converts to DOCX via the sfu-converter CLI.",
+  "author": {
+    "name": "bounchich1",
+    "url": "https://github.com/bounchich1/sfu_converter"
+  },
+  "homepage": "https://github.com/bounchich1/sfu_converter",
+  "repository": "https://github.com/bounchich1/sfu_converter",
+  "license": "MIT",
+  "keywords": [
+    "sfu",
+    "сфу",
+    "docx",
+    "academic",
+    "russian",
+    "txt-to-docx",
+    "report"
+  ],
+  "skills": "./codex-skills/",
+  "interface": {
+    "displayName": "SFU Converter",
+    "shortDescription": "Generate SFU academic documents as V2 TXT and convert them to DOCX",
+    "longDescription": "Routes SFU lab reports, coursework, VKR, research, practice, and small written works through one Codex skill, then uses the sfu-converter CLI lint and convert loop.",
+    "developerName": "bounchich1",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Сделай лабораторную работу СФУ по теме",
+      "Оформи курсовую СФУ и сконвертируй в DOCX"
+    ],
+    "websiteURL": "https://github.com/bounchich1/sfu_converter",
+    "brandColor": "#1D4ED8",
+    "screenshots": []
+  }
+}

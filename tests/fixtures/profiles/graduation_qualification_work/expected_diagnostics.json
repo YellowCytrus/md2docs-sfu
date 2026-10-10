@@ -1,0 +1,337 @@
+[
+  {
+    "code": "APPENDIX_AUTOLETTER_ASSIGNED",
+    "severity": "info",
+    "message": "Appendix at position 1 assigned letter А",
+    "ruleId": "common.appendix.auto_letter",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "Appendices",
+      "lineStart": 79,
+      "lineEnd": 79
+    },
+    "data": {
+      "letter": "А",
+      "position": 1
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'РЕФЕРАТ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 41,
+      "lineEnd": 41
+    },
+    "data": {
+      "abbreviation": "РЕФЕРАТ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'РЕФЕРАТ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 41,
+      "lineEnd": 41
+    },
+    "data": {
+      "abbreviation": "РЕФЕРАТ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'XML' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 42,
+      "lineEnd": 42
+    },
+    "data": {
+      "abbreviation": "XML"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'СОДЕРЖАНИЕ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 43,
+      "lineEnd": 43
+    },
+    "data": {
+      "abbreviation": "СОДЕРЖАНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'СОДЕРЖАНИЕ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 43,
+      "lineEnd": 43
+    },
+    "data": {
+      "abbreviation": "СОДЕРЖАНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'ВВЕДЕНИЕ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 44,
+      "lineEnd": 44
+    },
+    "data": {
+      "abbreviation": "ВВЕДЕНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'ВВЕДЕНИЕ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 44,
+      "lineEnd": 44
+    },
+    "data": {
+      "abbreviation": "ВВЕДЕНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'ЗАКЛЮЧЕНИЕ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 65,
+      "lineEnd": 65
+    },
+    "data": {
+      "abbreviation": "ЗАКЛЮЧЕНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'ЗАКЛЮЧЕНИЕ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 65,
+      "lineEnd": 65
+    },
+    "data": {
+      "abbreviation": "ЗАКЛЮЧЕНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'СПИСОК' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 67,
+      "lineEnd": 67
+    },
+    "data": {
+      "abbreviation": "СПИСОК"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'СОКРАЩЕНИЙ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 67,
+      "lineEnd": 67
+    },
+    "data": {
+      "abbreviation": "СОКРАЩЕНИЙ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'СПИСОК' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 67,
+      "lineEnd": 67
+    },
+    "data": {
+      "abbreviation": "СПИСОК"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'СОКРАЩЕНИЙ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 67,
+      "lineEnd": 67
+    },
+    "data": {
+      "abbreviation": "СОКРАЩЕНИЙ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'СПИСОК' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 68,
+      "lineEnd": 68
+    },
+    "data": {
+      "abbreviation": "СПИСОК"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'ИСПОЛЬЗОВАННЫХ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 68,
+      "lineEnd": 68
+    },
+    "data": {
+      "abbreviation": "ИСПОЛЬЗОВАННЫХ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'ИСТОЧНИКОВ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 68,
+      "lineEnd": 68
+    },
+    "data": {
+      "abbreviation": "ИСТОЧНИКОВ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'ИСПОЛЬЗОВАННЫХ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 68,
+      "lineEnd": 68
+    },
+    "data": {
+      "abbreviation": "ИСПОЛЬЗОВАННЫХ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'ИСТОЧНИКОВ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 68,
+      "lineEnd": 68
+    },
+    "data": {
+      "abbreviation": "ИСТОЧНИКОВ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_IN_HEADING",
+    "severity": "warning",
+    "message": "Abbreviation 'ПРИЛОЖЕНИЕ' is not allowed in headings or captions",
+    "ruleId": "common.style.no_abbreviations_in_headings",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 79,
+      "lineEnd": 79
+    },
+    "data": {
+      "abbreviation": "ПРИЛОЖЕНИЕ"
+    }
+  },
+  {
+    "code": "STYLE_ABBREVIATION_NOT_INTRODUCED",
+    "severity": "warning",
+    "message": "Abbreviation 'ПРИЛОЖЕНИЕ' is used before introduction",
+    "ruleId": "common.style.abbreviation_introduction",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Abbreviations",
+      "lineStart": 79,
+      "lineEnd": 79
+    },
+    "data": {
+      "abbreviation": "ПРИЛОЖЕНИЕ"
+    }
+  },
+  {
+    "code": "BIBLIOGRAPHY_GROUPING_METHOD",
+    "severity": "warning",
+    "message": "Bibliography grouping mixes or conflicts with selected method: alphabetical, chronological",
+    "ruleId": "common.bibliography.grouping_method",
+    "source": {
+      "document": "docs/formatting requirements/common.md",
+      "section": "List of Used Sources",
+      "lineStart": null,
+      "lineEnd": null
+    },
+    "data": {
+      "methods": [
+        "alphabetical",
+        "chronological"
+      ],
+      "selected": "alphabetical"
+    }
+  }
+]

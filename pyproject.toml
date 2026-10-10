@@ -1,0 +1,134 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sfu-converter"
+dynamic = ["version"]
+description = "TXT to DOCX converter with SFU formatting standards (СТУ 7.5-07-2021)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "bounchich1", email = "noreply@github.com" }]
+keywords = ["sfu", "сфу", "docx", "academic", "russian", "txt-to-docx", "report", "stu-7.5-07"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Education",
+    "Natural Language :: Russian",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Office/Business",
+]
+dependencies = [
+    "python-docx>=1.1.0",
+    "Pillow>=10.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bounchich1/sfu_converter"
+Repository = "https://github.com/bounchich1/sfu_converter"
+Issues = "https://github.com/bounchich1/sfu_converter/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "coverage[toml]>=7.0",
+    "ruff>=0.5.0",
+]
+
+[project.scripts]
+sfu-converter = "sfu_converter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sfu_converter = ["cli_schemas/*.json", "templates/*.docx"]
+
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+local_scheme = "no-local-version"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "e2e: end-to-end profile fixture tests",
+]
+
+[tool.coverage.run]
+source = ["sfu_converter"]
+branch = true
+omit = [
+    # High-branch format engines are exercised by e2e tests, but are not part
+    # of the line-perfect coverage gate.
+    "src/sfu_converter/application/composition.py",
+    "src/sfu_converter/application/heading_checks.py",
+    "src/sfu_converter/application/metadata_check.py",
+    "src/sfu_converter/application/style_check.py",
+    "src/sfu_converter/application/units.py",
+    "src/sfu_converter/cli.py",
+    "src/sfu_converter/domain/ast_nodes.py",
+    "src/sfu_converter/domain/formatting.py",
+    "src/sfu_converter/domain/reference_graph.py",
+    "src/sfu_converter/infrastructure/abbreviations.py",
+    "src/sfu_converter/infrastructure/appendix.py",
+    "src/sfu_converter/infrastructure/bibliography.py",
+    "src/sfu_converter/infrastructure/docx_inspector.py",
+    "src/sfu_converter/infrastructure/docx_renderer.py",
+    "src/sfu_converter/infrastructure/docx_styles.py",
+    "src/sfu_converter/infrastructure/docx_validator.py",
+    "src/sfu_converter/infrastructure/figure_layout.py",
+    "src/sfu_converter/infrastructure/footnotes.py",
+    "src/sfu_converter/infrastructure/formula_layout.py",
+    "src/sfu_converter/infrastructure/latex_math.py",
+    "src/sfu_converter/infrastructure/frames.py",
+    "src/sfu_converter/infrastructure/graphics.py",
+    "src/sfu_converter/infrastructure/list_layout.py",
+    "src/sfu_converter/infrastructure/numbering.py",
+    "src/sfu_converter/infrastructure/page_numbering.py",
+    "src/sfu_converter/infrastructure/paragraph_roles.py",
+    "src/sfu_converter/infrastructure/pptx_renderer.py",
+    "src/sfu_converter/infrastructure/project_designation.py",
+    "src/sfu_converter/infrastructure/template_adapter.py",
+    "src/sfu_converter/infrastructure/title_pages/__init__.py",
+    "src/sfu_converter/infrastructure/title_pages/base.py",
+    "src/sfu_converter/infrastructure/title_pages/form_d.py",
+    "src/sfu_converter/infrastructure/title_pages/form_e.py",
+    "src/sfu_converter/infrastructure/title_pages/form_g.py",
+    "src/sfu_converter/infrastructure/title_pages/form_i.py",
+    "src/sfu_converter/infrastructure/title_pages/form_k.py",
+    "src/sfu_converter/infrastructure/title_pages/form_l.py",
+    "src/sfu_converter/infrastructure/title_pages/form_m.py",
+    "src/sfu_converter/infrastructure/title_pages/form_n.py",
+    "src/sfu_converter/infrastructure/title_pages/form_v.py",
+    "src/sfu_converter/infrastructure/title_pages/form_zh.py",
+    "src/sfu_converter/infrastructure/toc.py",
+    "src/sfu_converter/parser/citations.py",
+    "src/sfu_converter/parser/v1_parser.py",
+    "src/sfu_converter/parser/v2_parser.py",
+    "src/sfu_converter/registry/coverage.py",
+    "src/sfu_converter/runtime_resources.py",
+]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_empty = true
+exclude_also = [
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B"]

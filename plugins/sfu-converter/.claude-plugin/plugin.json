@@ -1,0 +1,13 @@
+{
+  "name": "sfu-converter",
+  "version": "0.1.0",
+  "description": "Multi-skill pack for Siberian Federal University (СФУ) academic documents: a shared sfu-common skill plus one skill per document type (lab/coursework/VKR/research/practice/small works). Generates V2 TXT, lints, and converts to DOCX via the sfu-converter CLI.",
+  "author": {
+    "name": "bounchich1",
+    "url": "https://github.com/bounchich1/sfu_converter"
+  },
+  "homepage": "https://github.com/bounchich1/sfu_converter",
+  "repository": "https://github.com/bounchich1/sfu_converter",
+  "license": "MIT",
+  "keywords": ["sfu", "сфу", "docx", "academic", "russian", "txt-to-docx", "report"]
+}

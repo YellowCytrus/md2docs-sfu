@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sfu-converter.local/schemas/ast.json",
+  "title": "SFU Converter AST",
+  "type": "object",
+  "required": ["type", "blocks", "syntax_version", "metadata", "source_file"],
+  "properties": {
+    "type": {"const": "DOCUMENT"},
+    "blocks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/node"}
+    },
+    "syntax_version": {"type": "integer"},
+    "metadata": {"type": "object"},
+    "source_file": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "sourceSpan": {
+      "type": ["object", "null"],
+      "properties": {
+        "line_start": {"type": "integer"},
+        "line_end": {"type": "integer"},
+        "col_start": {"type": "integer"},
+        "col_end": {"type": "integer"},
+        "filename": {"type": ["string", "null"]}
+      }
+    },
+    "enumValue": {
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": {"type": "string"},
+        "value": {}
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string"},
+        "source": {"$ref": "#/$defs/sourceSpan"},
+        "level": {"$ref": "#/$defs/enumValue"},
+        "section_type": {"$ref": "#/$defs/enumValue"},
+        "list_type": {"$ref": "#/$defs/enumValue"},
+        "blocks": {"type": "array", "items": {"$ref": "#/$defs/node"}}
+      },
+      "additionalProperties": true
+    }
+  }
+}
