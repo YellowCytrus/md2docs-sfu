@@ -46,8 +46,9 @@ TOOL_DIR = Path(__file__).resolve().parent
 DEFAULT_TITLE = TOOL_DIR / "title_reference.docx"
 DEFAULT_CONFIG = _config_dir() / "obsidian2sfu.json"
 DEFAULT_VAULT = Path.home() / "obsidian_backup"
-# `sfu-converter` lives next to the Python interpreter that runs this script.
-DEFAULT_CONVERTER = str(Path(sys.executable).with_name("sfu-converter"))
+# `sfu-converter` is invoked via the same interpreter by default (works on
+# Windows and Linux alike); override with --converter if needed.
+DEFAULT_CONVERTER = None
 
 STRUCTURAL_TITLES = {
     "введение": "ВВЕДЕНИЕ",
@@ -991,13 +992,20 @@ def apply_table_splits(stage: Path, workdir: Path, max_passes: int = 80) -> None
     finalize_table_captions(stage)
 
 
-def convert_pdf(docx: Path, outdir: Path) -> Path | None:
-    import shutil as _sh
+def _find_libreoffice() -> str | None:
+    for name in ("libreoffice", "soffice", "soffice.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
 
-    if not _sh.which("libreoffice"):
+
+def convert_pdf(docx: Path, outdir: Path) -> Path | None:
+    soffice = _find_libreoffice()
+    if not soffice:
         return None
     subprocess.run(
-        ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", str(outdir), str(docx)],
+        [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(outdir), str(docx)],
         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     return outdir / (docx.stem + ".pdf")
@@ -1092,9 +1100,10 @@ def load_config(md: Path, overrides: dict, extra_config: str | None = None) -> d
 CONVERTER_VALIDATION_ERROR = 2
 
 
-def run_converter(converter: str, txt: Path, docx: Path, profile: str, workdir: Path) -> None:
-    cmd = [
-        converter, "convert",
+def run_converter(converter, txt: Path, docx: Path, profile: str, workdir: Path) -> None:
+    base = [converter] if converter else [sys.executable, "-m", "sfu_converter.cli"]
+    cmd = base + [
+        "convert",
         "--input", str(txt),
         "--output", str(docx),
         "--profile", profile,
@@ -1106,7 +1115,7 @@ def run_converter(converter: str, txt: Path, docx: Path, profile: str, workdir: 
     try:
         result = subprocess.run(cmd, check=False)
     except FileNotFoundError:
-        sys.exit(f"sfu-converter not found at {converter!r}; use --converter /path/to/sfu-converter")
+        sys.exit(f"sfu-converter not found: {converter!r}; use --converter /path/to/sfu-converter")
     if result.returncode == 0:
         return
     # `convert` writes the DOCX first, then reports validation diagnostics; it
@@ -1131,7 +1140,8 @@ def main() -> None:
     ap.add_argument("--config", default=None, help="extra JSON config to merge")
     ap.add_argument("--title-template", default=None)
     ap.add_argument("--sources-file", default=None, help="file with one bibliography entry per line")
-    ap.add_argument("--converter", default=DEFAULT_CONVERTER)
+    ap.add_argument("--converter", default=DEFAULT_CONVERTER,
+                    help="путь к sfu-converter (по умолчанию: python -m sfu_converter.cli)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="override metadata")
     ap.add_argument("--no-pdf", action="store_true", help="do not build a preview PDF")
     args = ap.parse_args()
