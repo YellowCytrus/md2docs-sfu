@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import unquote
@@ -670,30 +671,6 @@ _TABLE_CAPTION_RE = re.compile(r"^Таблица\s+([\w.]+)")
 _CONTINUATION_RE = re.compile(r"^(?:Продолжение|Окончание)\s+таблицы\s+([\w.]+)\s*$")
 
 
-def _compact(text: str) -> str:
-    """Casefold and drop all whitespace.
-
-    PDF layout wraps long cells mid-word (after a hyphen, say
-    ``Markdown-`` / ``документа``), so matching on raw text is brittle.
-    Comparing whitespace-free strings survives any line wrapping.
-    """
-
-    return re.sub(r"\s+", "", text).casefold()
-
-
-def _find_page(pages_compact: list[str], needle: str, start: int, stop: int | None = None):
-    """Return the 1-based page in ``[start, stop]`` whose compact text has ``needle``."""
-
-    needle_compact = _compact(needle)
-    if len(needle_compact) < 6:
-        return None
-    last = len(pages_compact) if stop is None else min(stop, len(pages_compact))
-    for index in range(start, last + 1):
-        if needle_compact in pages_compact[index - 1]:
-            return index
-    return None
-
-
 def _caption_above(items, index):
     """Return ``(paragraph, number)`` of the caption/label above ``items[index]``."""
 
@@ -720,92 +697,135 @@ def _has_bold_header(table) -> bool:
     return False
 
 
-def _build_word_index(pdf: Path) -> dict[str, list[tuple[int, float]]]:
-    """Map every word in the PDF to the sorted ``(page, y)`` where it appears.
+def _uno_module():
+    """Import ``uno`` from the system LibreOffice bindings, or ``None``.
 
-    Built from ``pdftotext -bbox``, so it records where a word is *physically*
-    laid out rather than merely which page's flattened text contains it. That
-    distinction matters because table cells repeat the same vocabulary all over
-    a report, which makes plain text matching latch onto the wrong occurrence.
+    The virtualenv has no pyuno of its own, but the distro ships one built for
+    the same CPython the venv runs. Prepending its directory lets us import it
+    in-process without adding a dependency to the project.
     """
 
-    xml = subprocess.run(
-        ["pdftotext", "-bbox", str(pdf), "-"],
-        capture_output=True,
-        text=True,
-    ).stdout
-    index: dict[str, list[tuple[int, float]]] = {}
-    page_number = 0
-    for page_match in re.finditer(r"<page\b.*?</page>", xml, re.S):
-        page_number += 1
-        for word_match in re.finditer(
-            r'<word xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>(.*?)</word>', page_match.group(0)
-        ):
-            word = _compact(word_match.group(3))
-            if not word:
+    try:
+        import uno  # noqa: PLC0415
+
+        return uno
+    except ImportError:
+        pass
+    candidates = [
+        Path("/usr/lib/python3/dist-packages"),
+        *sorted(Path("/usr/lib").glob("python3*/site-packages")),
+        *sorted(Path("/usr/lib").glob("python3*/dist-packages")),
+    ]
+    for directory in candidates:
+        if (directory / "uno.py").exists():
+            sys.path.insert(0, str(directory))
+            try:
+                import uno  # noqa: PLC0415
+
+                return uno
+            except ImportError:
                 continue
-            index.setdefault(word, []).append((page_number, float(word_match.group(2))))
-    return index
+    return None
 
 
-def _row_words(row) -> list[str]:
-    """Distinct compact words of a row, longest first."""
+def _layout_table_pages(docx_path: Path, port: int) -> dict[str, list[int]] | None:
+    """Ask LibreOffice's layout engine for the real page of every table row.
 
-    words: list[str] = []
-    for cell in row.cells:
-        words.extend(_compact(token) for token in cell.text.split())
-    seen: set[str] = set()
-    unique = [word for word in words if len(word) >= 4 and not (word in seen or seen.add(word))]
-    unique.sort(key=len, reverse=True)
-    return unique
-
-
-def _row_page_map(
-    table,
-    pages_compact: list[str],
-    start_page: int,
-    word_index: dict[str, list[tuple[int, float]]] | None = None,
-) -> list[int]:
-    """Best-effort page number for every table row, in document order.
-
-    With a ``word_index`` (from :func:`_build_word_index`) each row is placed by
-    the physical position of its words, matched greedily in reading order: the
-    first word found at or after the running cursor sets the row's page, and the
-    cursor then never moves backwards. Without it we fall back to flattening the
-    page text, which is less precise but still monotone.
+    Returns ``{table_name: [page per row]}`` or ``None`` when the engine is
+    unavailable. These are the numbers the engine actually paginated to — not an
+    estimate — so a table is only ever split where it really does cross a page.
     """
 
-    last_page = len(pages_compact)
-    page_map: list[int] = []
-    cursor = start_page
-    for row in table.rows:
-        page = cursor
-        words = _row_words(row)
-        if word_index is not None:
-            # A row's words are contiguous, so they can only advance one page.
-            limit = min(cursor + 1, last_page)
-            # Vote: a single recurring word can appear on the next page too, so
-            # trust the page where the majority of the row's words sit. A lone
-            # match is noise — fall back to the cursor so small tables are not
-            # mistaken for split ones.
-            tally: dict[int, int] = {}
-            for word in words:
-                for page_number, _y in word_index.get(word, ()):
-                    if cursor <= page_number <= limit:
-                        tally[page_number] = tally.get(page_number, 0) + 1
-            if tally:
-                best, votes = min(tally.items(), key=lambda item: (-item[1], item[0]))
-                if votes >= 2:
-                    page = best
-        else:
-            for word in words:
-                found = _find_page(pages_compact, word, cursor, stop=min(cursor + 1, last_page))
-                if found is not None:
-                    page = found
-                    break
-        page_map.append(page)
-        cursor = page
-    return page_map
+    uno = _uno_module()
+    if uno is None:
+        return None
+
+    from com.sun.star.beans import PropertyValue  # noqa: PLC0415
+
+    soffice = _find_libreoffice()
+    if soffice is None:
+        return None
+
+    def prop(name, value):
+        item = PropertyValue()
+        item.Name = name
+        item.Value = value
+        return item
+
+    process = subprocess.Popen(
+        [
+            soffice,
+            "--headless",
+            "--norestore",
+            "--invisible",
+            f"--accept=socket,host=127.0.0.1,port={port};urp;",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    document = None
+    desktop = None
+    try:
+        local_context = uno.getComponentContext()
+        resolver = local_context.ServiceManager.createInstanceWithContext(
+            "com.sun.star.bridge.UnoUrlResolver", local_context
+        )
+        url = f"uno:socket,host=127.0.0.1,port={port};urp;StarOffice.ComponentContext"
+        context = None
+        for _ in range(60):
+            try:
+                context = resolver.resolve(url)
+                break
+            except Exception:  # noqa: BLE001 - the socket may not be up yet
+                time.sleep(0.5)
+        if context is None:
+            return None
+
+        desktop = context.ServiceManager.createInstanceWithContext(
+            "com.sun.star.frame.Desktop", context
+        )
+        document = desktop.loadComponentFromURL(
+            uno.systemPathToFileUrl(str(docx_path.resolve())),
+            "_blank",
+            0,
+            (prop("Hidden", True), prop("ReadOnly", True)),
+        )
+        if document is None:
+            return None
+
+        cursor = document.CurrentController.getViewCursor()
+        tables = document.getTextTables()
+        layout: dict[str, list[int]] = {}
+        for index in range(tables.getCount()):
+            table = tables.getByIndex(index)
+            rows = table.getRows()
+            pages = []
+            for row_index in range(rows.getCount()):
+                cell = table.getCellByName(f"A{row_index + 1}")
+                text_cursor = cell.getText().createTextCursor()
+                text_cursor.gotoStart(False)
+                cursor.gotoRange(text_cursor, False)
+                pages.append(cursor.getPage())
+            layout[table.getName()] = pages
+        return layout
+    except Exception:  # noqa: BLE001 - layout is best-effort
+        return None
+    finally:
+        if document is not None:
+            try:
+                document.close(False)
+            except Exception:  # noqa: BLE001
+                pass
+        if desktop is not None:
+            try:
+                desktop.terminate()
+            except Exception:  # noqa: BLE001
+                pass
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
 
 
 def _clone_table_with_rows(template_tbl, rows):
@@ -854,33 +874,28 @@ def _body_items(doc) -> list[tuple[str, object]]:
     return items
 
 
-def _first_spanning_table(doc, pages: list[str], word_index=None, skip=None) -> dict | None:
-    """First captioned table whose rows run past the page holding its caption.
+def _first_spanning_table(doc, row_pages: list[list[int]]) -> dict | None:
+    """First captioned table whose rows the layout engine put on several pages.
 
     Only tables with a real ``Таблица N — ...`` caption participate; a title-page
-    layout table has no such caption and is left alone. ``skip`` holds captions
-    already found to be too small to cut.
+    layout table has no such caption and is left alone. ``row_pages`` is the
+    per-table row->page mapping produced by the engine, in document order.
     """
 
     items = _body_items(doc)
-    pages_compact = [_compact(page) for page in pages]
-    min_page = 1
     for index, (kind, table) in enumerate(items):
         if kind != "t":
             continue
         caption_para, number = _caption_above(items, index)
         if caption_para is None or number is None:
             continue
+        row_index = sum(1 for kind_, _ in items[:index] if kind_ == "t")
+        if row_index >= len(row_pages):
+            continue
+        page_map = row_pages[row_index]
+        if len(page_map) < 2 or max(page_map) <= min(page_map):
+            continue
         text = caption_para.text.strip()
-        if skip and text in skip:
-            continue
-        caption_page = _find_page(pages_compact, text, min_page)
-        if caption_page is None:
-            continue
-        min_page = caption_page
-        page_map = _row_page_map(table, pages_compact, caption_page, word_index)
-        if not page_map or max(page_map) <= caption_page:
-            continue
         return {
             "caption": text,
             "caption_paragraph": caption_para,
@@ -893,17 +908,17 @@ def _first_spanning_table(doc, pages: list[str], word_index=None, skip=None) -> 
 
 
 def _split_spanning_table(doc, found: dict) -> bool:
-    """Cut a table that is taller than one page at its measured page boundary."""
+    """Cut a table at the page boundary the layout engine actually produced."""
 
     table = found["table"]
     page_map = found["page_map"]
     header_count = 1 if _has_bold_header(table) else 0
-    if len(page_map) <= header_count:
+    if len(page_map) <= header_count + 1:
         return False
 
-    start_page = page_map[header_count]
+    first_page = page_map[0]
     boundary = next(
-        (index for index in range(header_count, len(page_map)) if page_map[index] > start_page),
+        (index for index in range(header_count, len(page_map)) if page_map[index] > first_page),
         None,
     )
     trs = table._tbl.findall(qn("w:tr"))
@@ -923,49 +938,35 @@ def _split_spanning_table(doc, found: dict) -> bool:
     return True
 
 
-def reflow_tables(stage: Path, workdir: Path, max_passes: int = 24) -> None:
-    """Keep page-spanning tables whole where possible; split only oversized ones.
+def reflow_tables(stage: Path, workdir: Path, max_passes: int = 40) -> None:
+    """Split page-spanning tables, then repeat until every part fits a page.
 
-    A table that merely fails to fit in what is left of the current page is first
-    moved to the next page as a whole — most tables fit, and cutting them just
-    litters the document with "Продолжение таблицы N" labels. Only a table that
-    is taller than a full page even after that is cut into parts; every
-    continuation part then opens its own page via `pageBreakBefore` on its
-    caption, so the label can never be stranded mid-page.
+    The split points are not estimated: each pass asks the LibreOffice layout
+    engine (via pyuno) which page every table row actually landed on, and cuts
+    at the first row that the engine moved to a later page. Because the engine
+    knows the real geometry, a table is never cut speculatively and a part is
+    never left straddling a page — the loop keeps going until the engine reports
+    that every table sits on a single page. Continuation captions open their own
+    page (``pageBreakBefore``), so the label and its part always belong
+    together.
     """
 
-    if not (_find_libreoffice() and shutil.which("pdftotext")):
+    if _find_libreoffice() is None:
         return
 
-    skip: set[str] = set()
-    for _ in range(max_passes):
-        pdf = convert_pdf(stage, workdir)
-        if pdf is None:
+    for pass_index in range(max_passes):
+        row_pages = _layout_table_pages(stage, port=2100 + pass_index)
+        if not row_pages:
             break
-        pages = pdf_pages(pdf)
-        word_index = _build_word_index(pdf)
+        row_pages = list(row_pages.values())
         doc = Document(str(stage))
-        found = _first_spanning_table(doc, pages, word_index, skip=skip)
+        found = _first_spanning_table(doc, row_pages)
         if found is None:
             break
-
-        caption = found["caption_paragraph"]
-        at_page_top = bool(caption.paragraph_format.page_break_before)
-        if not found["continuation"] and not at_page_top:
-            # The table may well fit on a page of its own — find out.
-            caption.paragraph_format.page_break_before = True
-            doc.save(str(stage))
-            continue
-
         if _split_spanning_table(doc, found):
             doc.save(str(stage))
             continue
-
-        # Too small (or too marginal) to cut meaningfully: stop considering it
-        # and carry on with the remaining tables.
-        skip.add(found["caption"])
-        if skip:
-            continue
+        break
 
     finalize_table_captions(stage)
 
