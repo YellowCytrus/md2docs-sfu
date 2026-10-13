@@ -693,20 +693,6 @@ def _find_page(pages_compact: list[str], needle: str, start: int):
     return None
 
 
-def _page_first_lines(pages: list[str]) -> list[str]:
-    """Compact first non-empty line of every page."""
-
-    first_lines = []
-    for page in pages:
-        first = ""
-        for line in page.splitlines():
-            if line.strip():
-                first = _compact(line)
-                break
-        first_lines.append(first)
-    return first_lines
-
-
 def _caption_above(items, index):
     """Return ``(paragraph, number)`` of the caption/label above ``items[index]``."""
 
@@ -776,7 +762,12 @@ def _clone_table_with_rows(template_tbl, rows):
 
 
 def _add_continuation_caption(doc: Document, anchor, text: str):
-    """Insert a continuation caption right after ``anchor``; keep it with the table."""
+    """Insert a continuation caption right after ``anchor``.
+
+    The caption opens its own page (``pageBreakBefore``) and is bound to the
+    table part that follows (``keep_with_next``), so the two can never be split
+    across pages.
+    """
 
     para = doc.add_paragraph()
     run = para.add_run(text)
@@ -786,34 +777,34 @@ def _add_continuation_caption(doc: Document, anchor, text: str):
         para.style = doc.styles["SFUTableCaption"]
     except KeyError:
         pass
+    para.paragraph_format.page_break_before = True
     para.paragraph_format.keep_with_next = True
     anchor.addnext(para._p)
     return para
 
 
-def split_first_table_at_page_break(stage: Path, pages: list[str]) -> bool:
-    """Split the first table that crosses a page boundary.
-
-    Exactly one table is split per call so the caller can re-render and
-    re-measure the pagination before touching the next table, since every split
-    pushes the following content down.
-    """
+def _body_items(doc) -> list[tuple[str, object]]:
+    """Body-level items as ``(kind, object)``: 'p' for paragraphs, 't' for tables."""
 
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
-    doc = Document(str(stage))
-    body = doc.element.body
-    pages_compact = [_compact(page) for page in pages]
-
     items = []
-    for child in body.iterchildren():
+    for child in doc.element.body.iterchildren():
         if child.tag == qn("w:p"):
             items.append(("p", Paragraph(child, doc)))
         elif child.tag == qn("w:tbl"):
             items.append(("t", Table(child, doc)))
+    return items
 
+
+def _first_spanning_table(doc, pages: list[str]) -> dict | None:
+    """First captioned table whose rows run past the page holding its caption."""
+
+    body = doc.element.body
+    items = _body_items(doc)
     first_tbl = body.find(qn("w:tbl"))  # title-page signature table
+    pages_compact = [_compact(page) for page in pages]
     min_page = 1
     for index, (kind, table) in enumerate(items):
         if kind != "t" or table._tbl is first_tbl:
@@ -825,111 +816,90 @@ def split_first_table_at_page_break(stage: Path, pages: list[str]) -> bool:
         if caption_page is None:
             continue
         min_page = caption_page
-
         page_map = _row_page_map(table, pages_compact, caption_page)
         if not page_map or max(page_map) <= caption_page:
             continue
-
-        trs = table._tbl.findall(qn("w:tr"))
-        header_count = 1 if _has_bold_header(table) else 0
-        boundaries = []
-        previous = None
-        for row_index, page in enumerate(page_map):
-            if row_index < header_count:
-                previous = page
-                continue
-            if previous is not None and page > previous:
-                boundaries.append(row_index)
-            previous = page
-        boundaries = [boundary for boundary in boundaries if boundary > header_count]
-        if not boundaries:
-            continue
-
-        chunks: list[list] = []
-        start = 0
-        for boundary in boundaries:
-            chunks.append(trs[start:boundary])
-            start = boundary
-        chunks.append(trs[start:])
-        chunks = [chunk for chunk in chunks if chunk]
-        if len(chunks) < 2:
-            continue
-
-        header_rows = trs[:header_count]
-        tbl = table._tbl
-        for tr in list(trs):
-            tbl.remove(tr)
-        for tr in chunks[0]:
-            tbl.append(tr)
-
-        anchor = tbl
-        for chunk in chunks[1:]:
-            para = _add_continuation_caption(doc, anchor, f"Продолжение таблицы {number}")
-            new_tbl = _clone_table_with_rows(tbl, header_rows + chunk)
-            para._p.addnext(new_tbl)
-            anchor = new_tbl
-
-        doc.save(str(stage))
-        return True
-    return False
+        text = caption_para.text.strip()
+        return {
+            "caption": text,
+            "caption_paragraph": caption_para,
+            "table": table,
+            "number": number,
+            "page_map": page_map,
+            "continuation": _CONTINUATION_RE.match(text) is not None,
+        }
+    return None
 
 
-def repair_first_misplaced_label(stage: Path, pages: list[str]) -> bool:
-    """Nudge a split boundary so a continuation caption starts its page.
+def _split_spanning_table(doc, found: dict) -> bool:
+    """Cut a table that is taller than one page at its measured page boundary."""
 
-    Inserting a caption consumes a line, which can push the preceding chunk's
-    last row onto the continuation page above the caption. Moving that row into
-    the labelled chunk restores "caption is the first line of the page". One row
-    is moved per call; the caller re-renders and re-checks.
+    table = found["table"]
+    page_map = found["page_map"]
+    header_count = 1 if _has_bold_header(table) else 0
+    if len(page_map) <= header_count:
+        return False
+
+    start_page = page_map[header_count]
+    boundary = next(
+        (index for index in range(header_count, len(page_map)) if page_map[index] > start_page),
+        None,
+    )
+    trs = table._tbl.findall(qn("w:tr"))
+    if boundary is None or boundary >= len(trs) or boundary <= header_count:
+        return False
+
+    header_rows = trs[:header_count]
+    tbl = table._tbl
+    for tr in list(trs):
+        tbl.remove(tr)
+    for tr in trs[:boundary]:
+        tbl.append(tr)
+
+    label = _add_continuation_caption(doc, tbl, f"Продолжение таблицы {found['number']}")
+    new_tbl = _clone_table_with_rows(tbl, header_rows + trs[boundary:])
+    label._p.addnext(new_tbl)
+    return True
+
+
+def reflow_tables(stage: Path, workdir: Path, max_passes: int = 24) -> None:
+    """Keep page-spanning tables whole where possible; split only oversized ones.
+
+    A table that merely fails to fit in what is left of the current page is first
+    moved to the next page as a whole — most tables fit, and cutting them just
+    litters the document with "Продолжение таблицы N" labels. Only a table that
+    is taller than a full page even after that is cut into parts; every
+    continuation part then opens its own page via `pageBreakBefore` on its
+    caption, so the label can never be stranded mid-page.
     """
 
-    from docx.table import Table
+    if not (_find_libreoffice() and shutil.which("pdftotext")):
+        return
 
-    doc = Document(str(stage))
-    body = doc.element.body
-    pages_compact = [_compact(page) for page in pages]
-    first_lines = _page_first_lines(pages)
-    children = list(body.iterchildren())
+    for _ in range(max_passes):
+        pdf = convert_pdf(stage, workdir)
+        if pdf is None:
+            break
+        pages = pdf_pages(pdf)
+        doc = Document(str(stage))
+        found = _first_spanning_table(doc, pages)
+        if found is None:
+            break
 
-    cursor = 1
-    for index, child in enumerate(children):
-        if child.tag != qn("w:p"):
+        caption = found["caption_paragraph"]
+        at_page_top = bool(caption.paragraph_format.page_break_before)
+        if not found["continuation"] and not at_page_top:
+            # The table may well fit on a page of its own — find out.
+            caption.paragraph_format.page_break_before = True
+            doc.save(str(stage))
             continue
-        text = "".join(t.text or "" for t in child.findall(".//" + qn("w:t"))).strip()
-        if not _CONTINUATION_RE.match(text):
-            continue
-        page = _find_page(pages_compact, text, cursor)
-        if page is None:
-            continue
-        cursor = page
-        if first_lines[page - 1].startswith(_compact(text)[:16]):
-            continue  # caption already opens its page
 
-        prev_tbl = next(
-            (children[j] for j in range(index - 1, -1, -1) if children[j].tag == qn("w:tbl")), None
-        )
-        next_tbl = next(
-            (children[j] for j in range(index + 1, len(children)) if children[j].tag == qn("w:tbl")),
-            None,
-        )
-        if prev_tbl is None or next_tbl is None:
+        if _split_spanning_table(doc, found):
+            doc.save(str(stage))
             continue
-        prev_trs = prev_tbl.findall(qn("w:tr"))
-        next_header = 1 if _has_bold_header(Table(next_tbl, doc)) else 0
-        if len(prev_trs) <= next_header:
-            continue  # nothing left to move without emptying the chunk
-        moved = prev_trs[-1]
-        prev_tbl.remove(moved)
-        next_trs = next_tbl.findall(qn("w:tr"))
-        if next_header and len(next_trs) >= next_header:
-            next_trs[next_header - 1].addnext(moved)
-        elif next_trs:
-            next_trs[0].addprevious(moved)
-        else:
-            next_tbl.append(moved)
-        doc.save(str(stage))
-        return True
-    return False
+        break
+
+    finalize_table_captions(stage)
 
 
 def normalize_continuation_labels(doc: Document) -> None:
@@ -968,28 +938,6 @@ def finalize_table_captions(stage: Path) -> None:
     normalize_continuation_labels(doc)
     keep_caption_with_table(doc)
     doc.save(str(stage))
-
-
-def apply_table_splits(stage: Path, workdir: Path, max_passes: int = 80) -> None:
-    """Split page-spanning tables and label the parts, re-rendering every step.
-
-    Each pass performs the first split or boundary repair it finds and then
-    re-renders, because both operations shift the pagination of everything below.
-    """
-
-    if not (shutil.which("libreoffice") and shutil.which("pdftotext")):
-        return
-    for _ in range(max_passes):
-        pdf = convert_pdf(stage, workdir)
-        if pdf is None:
-            break
-        pages = pdf_pages(pdf)
-        if split_first_table_at_page_break(stage, pages):
-            continue
-        if repair_first_misplaced_label(stage, pages):
-            continue
-        break
-    finalize_table_captions(stage)
 
 
 def _find_libreoffice() -> str | None:
@@ -1202,7 +1150,7 @@ def main() -> None:
 
     # Split tables that run over a page boundary and label their continuations
     # ("Продолжение/Окончание таблицы N"); re-measure after every split.
-    apply_table_splits(stage, workdir)
+    reflow_tables(stage, workdir)
 
     with_toc = None
     pdf = convert_pdf(stage, workdir)
