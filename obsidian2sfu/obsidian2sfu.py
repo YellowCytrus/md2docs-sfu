@@ -681,13 +681,14 @@ def _compact(text: str) -> str:
     return re.sub(r"\s+", "", text).casefold()
 
 
-def _find_page(pages_compact: list[str], needle: str, start: int):
-    """Return the 1-based page whose compact text contains ``needle``."""
+def _find_page(pages_compact: list[str], needle: str, start: int, stop: int | None = None):
+    """Return the 1-based page in ``[start, stop]`` whose compact text has ``needle``."""
 
     needle_compact = _compact(needle)
     if len(needle_compact) < 6:
         return None
-    for index in range(start, len(pages_compact) + 1):
+    last = len(pages_compact) if stop is None else min(stop, len(pages_compact))
+    for index in range(start, last + 1):
         if needle_compact in pages_compact[index - 1]:
             return index
     return None
@@ -719,37 +720,92 @@ def _has_bold_header(table) -> bool:
     return False
 
 
-def _row_page_map(table, pages_compact: list[str], start_page: int) -> list[int]:
-    """Best-effort page number for every table row, in document order."""
+def _build_word_index(pdf: Path) -> dict[str, list[tuple[int, float]]]:
+    """Map every word in the PDF to the sorted ``(page, y)`` where it appears.
 
-    cursor = start_page
-    page_map: list[int | None] = []
-    for row in table.rows:
-        cells = sorted(
-            (cell.text.strip() for cell in row.cells if cell.text.strip()),
-            key=len,
-            reverse=True,
-        )
-        page = None
-        for cell in cells:
-            if len(_compact(cell)) < 8:
+    Built from ``pdftotext -bbox``, so it records where a word is *physically*
+    laid out rather than merely which page's flattened text contains it. That
+    distinction matters because table cells repeat the same vocabulary all over
+    a report, which makes plain text matching latch onto the wrong occurrence.
+    """
+
+    xml = subprocess.run(
+        ["pdftotext", "-bbox", str(pdf), "-"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    index: dict[str, list[tuple[int, float]]] = {}
+    page_number = 0
+    for page_match in re.finditer(r"<page\b.*?</page>", xml, re.S):
+        page_number += 1
+        for word_match in re.finditer(
+            r'<word xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>(.*?)</word>', page_match.group(0)
+        ):
+            word = _compact(word_match.group(3))
+            if not word:
                 continue
-            found = _find_page(pages_compact, cell, cursor)
-            if found is not None:
-                page = found
-                break
-        page_map.append(page)
+            index.setdefault(word, []).append((page_number, float(word_match.group(2))))
+    return index
 
-    # Rows whose text could not be located inherit the surrounding page. Rows at
-    # the top of a continuation page must not stay in the previous chunk.
-    previous = start_page
-    for index, page in enumerate(page_map):
-        if page is not None:
-            previous = page
-            continue
-        following = next((p for p in page_map[index + 1 :] if p is not None), None)
-        page_map[index] = following if (following and following > previous) else previous
-    return [page for page in page_map if page is not None]
+
+def _row_words(row) -> list[str]:
+    """Distinct compact words of a row, longest first."""
+
+    words: list[str] = []
+    for cell in row.cells:
+        words.extend(_compact(token) for token in cell.text.split())
+    seen: set[str] = set()
+    unique = [word for word in words if len(word) >= 4 and not (word in seen or seen.add(word))]
+    unique.sort(key=len, reverse=True)
+    return unique
+
+
+def _row_page_map(
+    table,
+    pages_compact: list[str],
+    start_page: int,
+    word_index: dict[str, list[tuple[int, float]]] | None = None,
+) -> list[int]:
+    """Best-effort page number for every table row, in document order.
+
+    With a ``word_index`` (from :func:`_build_word_index`) each row is placed by
+    the physical position of its words, matched greedily in reading order: the
+    first word found at or after the running cursor sets the row's page, and the
+    cursor then never moves backwards. Without it we fall back to flattening the
+    page text, which is less precise but still monotone.
+    """
+
+    last_page = len(pages_compact)
+    page_map: list[int] = []
+    cursor = start_page
+    for row in table.rows:
+        page = cursor
+        words = _row_words(row)
+        if word_index is not None:
+            # A row's words are contiguous, so they can only advance one page.
+            limit = min(cursor + 1, last_page)
+            # Vote: a single recurring word can appear on the next page too, so
+            # trust the page where the majority of the row's words sit. A lone
+            # match is noise — fall back to the cursor so small tables are not
+            # mistaken for split ones.
+            tally: dict[int, int] = {}
+            for word in words:
+                for page_number, _y in word_index.get(word, ()):
+                    if cursor <= page_number <= limit:
+                        tally[page_number] = tally.get(page_number, 0) + 1
+            if tally:
+                best, votes = min(tally.items(), key=lambda item: (-item[1], item[0]))
+                if votes >= 2:
+                    page = best
+        else:
+            for word in words:
+                found = _find_page(pages_compact, word, cursor, stop=min(cursor + 1, last_page))
+                if found is not None:
+                    page = found
+                    break
+        page_map.append(page)
+        cursor = page
+    return page_map
 
 
 def _clone_table_with_rows(template_tbl, rows):
@@ -798,28 +854,33 @@ def _body_items(doc) -> list[tuple[str, object]]:
     return items
 
 
-def _first_spanning_table(doc, pages: list[str]) -> dict | None:
-    """First captioned table whose rows run past the page holding its caption."""
+def _first_spanning_table(doc, pages: list[str], word_index=None, skip=None) -> dict | None:
+    """First captioned table whose rows run past the page holding its caption.
 
-    body = doc.element.body
+    Only tables with a real ``Таблица N — ...`` caption participate; a title-page
+    layout table has no such caption and is left alone. ``skip`` holds captions
+    already found to be too small to cut.
+    """
+
     items = _body_items(doc)
-    first_tbl = body.find(qn("w:tbl"))  # title-page signature table
     pages_compact = [_compact(page) for page in pages]
     min_page = 1
     for index, (kind, table) in enumerate(items):
-        if kind != "t" or table._tbl is first_tbl:
+        if kind != "t":
             continue
         caption_para, number = _caption_above(items, index)
         if caption_para is None or number is None:
             continue
-        caption_page = _find_page(pages_compact, caption_para.text.strip(), min_page)
+        text = caption_para.text.strip()
+        if skip and text in skip:
+            continue
+        caption_page = _find_page(pages_compact, text, min_page)
         if caption_page is None:
             continue
         min_page = caption_page
-        page_map = _row_page_map(table, pages_compact, caption_page)
+        page_map = _row_page_map(table, pages_compact, caption_page, word_index)
         if not page_map or max(page_map) <= caption_page:
             continue
-        text = caption_para.text.strip()
         return {
             "caption": text,
             "caption_paragraph": caption_para,
@@ -876,13 +937,15 @@ def reflow_tables(stage: Path, workdir: Path, max_passes: int = 24) -> None:
     if not (_find_libreoffice() and shutil.which("pdftotext")):
         return
 
+    skip: set[str] = set()
     for _ in range(max_passes):
         pdf = convert_pdf(stage, workdir)
         if pdf is None:
             break
         pages = pdf_pages(pdf)
+        word_index = _build_word_index(pdf)
         doc = Document(str(stage))
-        found = _first_spanning_table(doc, pages)
+        found = _first_spanning_table(doc, pages, word_index, skip=skip)
         if found is None:
             break
 
@@ -897,7 +960,12 @@ def reflow_tables(stage: Path, workdir: Path, max_passes: int = 24) -> None:
         if _split_spanning_table(doc, found):
             doc.save(str(stage))
             continue
-        break
+
+        # Too small (or too marginal) to cut meaningfully: stop considering it
+        # and carry on with the remaining tables.
+        skip.add(found["caption"])
+        if skip:
+            continue
 
     finalize_table_captions(stage)
 
