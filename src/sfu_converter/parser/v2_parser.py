@@ -42,6 +42,7 @@ from sfu_converter.domain.ast_nodes import (
     TitlePageNode,
     TitleBlockForm,
 )
+from sfu_converter.domain.dashes import normalize_dashes
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
 from sfu_converter.parser.attributes import parse_attributes
 from sfu_converter.parser.base import BaseParser, ParserResult
@@ -428,7 +429,7 @@ class V2Parser(BaseParser):
             return None
         return HeadingNode(
             level=level,
-            text=attrs.get("title", ""),
+            text=normalize_dashes(attrs.get("title", "")),
             number=attrs.get("number"),
             source=span,
         )

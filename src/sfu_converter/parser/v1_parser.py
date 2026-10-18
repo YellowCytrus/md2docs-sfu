@@ -32,6 +32,7 @@ from sfu_converter.domain.ast_nodes import (
     TextRun,
     TitlePageNode,
 )
+from sfu_converter.domain.dashes import normalize_dashes
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
 from sfu_converter.parser.attributes import parse_attributes
 from sfu_converter.parser.base import BaseParser, ParserResult
@@ -199,7 +200,7 @@ class V1Parser(BaseParser):
                         blocks.append(
                             HeadingNode(
                                 level=HeadingLevel.H1,
-                                text=title,
+                                text=normalize_dashes(title),
                                 number="auto",
                                 source=span,
                             )
@@ -222,7 +223,9 @@ class V1Parser(BaseParser):
                     blocks.append(
                         HeadingNode(
                             level=HeadingLevel(heading_level),
-                            text=_HEADING_MARKER_RE.sub("", stripped, count=1).strip(),
+                            text=normalize_dashes(
+                                _HEADING_MARKER_RE.sub("", stripped, count=1).strip()
+                            ),
                             number="auto",
                             source=span,
                         )

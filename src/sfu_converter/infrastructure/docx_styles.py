@@ -75,15 +75,18 @@ def register_styles(document) -> None:
               alignment=WD_ALIGN_PARAGRAPH.LEFT, first_line_indent=NO_INDENT_CM,
               line_spacing=1.0)
     _register(document, TABLE_CAPTION, base="Caption",
-              alignment=WD_ALIGN_PARAGRAPH.LEFT, first_line_indent=NO_INDENT_CM)
+              alignment=WD_ALIGN_PARAGRAPH.LEFT, first_line_indent=NO_INDENT_CM,
+              line_spacing=1.0)
     _register(document, TABLE_UNIT, base="Normal", size=Pt(12),
               alignment=WD_ALIGN_PARAGRAPH.RIGHT, first_line_indent=NO_INDENT_CM)
     _register_table(document, TABLE)
     _register_table(document, ABBREVIATIONS_TABLE)
     _register(document, FIGURE_CAPTION, base="Caption",
-              alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM)
+              alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM,
+              line_spacing=1.0)
     _register(document, FIGURE_EXPLANATORY, base="Normal", size=Pt(12),
-              alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM)
+              alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM,
+              line_spacing=1.0)
     _register(document, FIGURE_PLACEHOLDER, base="Normal", italic=True,
               first_line_indent=NO_INDENT_CM)
     _register(document, FORMULA_BODY, base="Normal",

@@ -32,6 +32,7 @@ ALL_STYLE_TYPES = (
     "empty_after_table",
     "empty_before_formula",
     "empty_after_formula",
+    "empty_line",
     "formula",
     "formula_explanation",
     "bibliography_entry",
@@ -98,13 +99,13 @@ def test_h2_style_is_bold(tmp_path):
     assert para.runs[0].bold is True
 
 
-def test_h3_style_is_not_bold(tmp_path):
+def test_h3_style_is_bold(tmp_path):
     renderer = _make_renderer(tmp_path)
     para = _new_para(renderer)
 
     renderer._set_paragraph_format(para, "h3")
 
-    assert para.runs[0].bold is False
+    assert para.runs[0].bold is True
 
 
 def test_list_item_style_matches_body_indent_and_spacing(tmp_path):
@@ -160,7 +161,7 @@ def test_empty_before_image_uses_zero_indent(tmp_path):
     renderer._set_paragraph_format(para, "empty_before_image")
 
     assert abs(para.paragraph_format.first_line_indent - Cm(0)) < 1000
-    assert para.paragraph_format.line_spacing == 0.8
+    assert para.paragraph_format.line_spacing == 1.0
 
 
 def test_unknown_style_logs_warning_and_skips(tmp_path, caplog):

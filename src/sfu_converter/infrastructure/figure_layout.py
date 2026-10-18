@@ -14,7 +14,8 @@ from sfu_converter.domain.ast_nodes import (
     StructuralSectionNode,
     TableCaptionNode,
 )
-from sfu_converter.domain.constants import DASH_SEPARATOR, EN_DASH
+from sfu_converter.domain.constants import DASH_SEPARATOR
+from sfu_converter.domain.dashes import normalize_dashes
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
 from sfu_converter.domain.reference_graph import ReferenceGraph, ReferenceTargetKind, build_reference_graph
 
@@ -61,7 +62,7 @@ def figure_caption_text(block: FigureNode, number: str) -> str | None:
 
 
 def normalize_caption_dashes(text: str) -> str:
-    return re.sub(rf"\s[-{EN_DASH}]\s", DASH_SEPARATOR, text)
+    return normalize_dashes(text)
 
 
 def figure_reference_diagnostics(

@@ -56,8 +56,8 @@ from sfu_converter.domain.constants import (
     APPENDIX_TITLE,
     DASH_SEPARATOR,
     EM_DASH,
-    EN_DASH,
 )
+from sfu_converter.domain.dashes import normalize_dashes
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
 from sfu_converter.domain.formatting import FormattingProfile, unsupported_rule_diagnostics
 from sfu_converter.domain.reference_graph import build_reference_graph
@@ -114,6 +114,10 @@ _SFU_STYLE_BY_TYPE = {
 
 _ITALIC_LETTER_RE = re.compile(r"^[A-Za-zα-ωΑ-Ω]$")
 
+# Consecutive plain-text blocks form one continuous passage and are not
+# separated by blank lines (СТУ: сплошной текст).
+_CONTINUOUS_TEXT_BLOCKS = (ParagraphNode, ListNode, RawBlockNode, ReferenceNode)
+
 
 class SectionNumberer:
     """Tracks hierarchical section numbers for H1-H4 headings."""
@@ -149,9 +153,10 @@ class DocxRenderer(RendererPort):
         self.doc = None
         self.logger = logger or logging.getLogger(__name__)
         self._style_map = self._build_style_map()
-        self._bold_styles = frozenset({"h1", "h2", "structural_section", "toc_heading", "appendix_heading"})
+        self._bold_styles = frozenset({"h1", "h2", "h3", "structural_section", "toc_heading", "appendix_heading"})
         self._section_numberer = SectionNumberer()
         self._rendered_body_blocks = False
+        self._in_bibliography_section = False
         self._math = LatexMathConverter(logger=self.logger)
 
     def render(
@@ -384,6 +389,12 @@ class DocxRenderer(RendererPort):
                 "space_before": zero,
                 "space_after": zero,
             },
+            "empty_line": {
+                "indent": no_indent,
+                "line_spacing": 1.0,
+                "space_before": zero,
+                "space_after": zero,
+            },
             "formula": {
                 "align": cfg.FORMULA["align"],
                 "indent": cfg.FORMULA["indent"],
@@ -442,9 +453,95 @@ class DocxRenderer(RendererPort):
         p = self.doc.add_paragraph()
         self._set_paragraph_format(p, style_type)
 
-    def _insert_image(self, image_path=None, caption=None, *, explanatory_data=None):
-        one_line = Pt(14)  # СТУ 7.8.1: сверху и снизу — интервал в одну строку
+    def _last_body_element(self):
+        """Return the last paragraph/table in the document body, ignoring sectPr."""
 
+        if self.doc is None:
+            return None
+        for child in reversed(list(self.doc.element.body.iterchildren())):
+            if child.tag == qn("w:sectPr"):
+                continue
+            if child.tag in (qn("w:p"), qn("w:tbl")):
+                return child
+        return None
+
+    @staticmethod
+    def _paragraph_has_page_break(paragraph) -> bool:
+        for br in paragraph.iter(qn("w:br")):
+            if br.get(qn("w:type")) == "page":
+                return True
+        p_pr = paragraph.find(qn("w:pPr"))
+        return p_pr is not None and p_pr.find(qn("w:sectPr")) is not None
+
+    def _is_at_page_start(self) -> bool:
+        last = self._last_body_element()
+        if last is None:
+            return True
+        if last.tag != qn("w:p"):
+            return False
+        return self._paragraph_has_page_break(last)
+
+    def _last_body_element_is_blank(self) -> bool:
+        last = self._last_body_element()
+        if last is None or last.tag != qn("w:p"):
+            return False
+        if self._paragraph_has_page_break(last):
+            return False
+        if last.find(".//" + qn("w:drawing")) is not None:
+            return False
+        text = "".join(node.text or "" for node in last.iter(qn("w:t")))
+        return not text.strip()
+
+    def _separate(self) -> None:
+        """Insert exactly one blank line between structural elements."""
+
+        if self._is_at_page_start() or self._last_body_element_is_blank():
+            return
+        paragraph = self.doc.add_paragraph()
+        self._set_paragraph_format(paragraph, "empty_line")
+
+    def _maybe_separate(self, block, previous_block) -> None:
+        """Add a blank line before ``block`` when the layout calls for one."""
+
+        if isinstance(
+            block,
+            (
+                AppendixNode,
+                DrawingSheetNode,
+                FootnoteNode,
+                PageBreakNode,
+                PosterNode,
+                ProjectDesignationNode,
+                SectionSetupNode,
+                TableOfContentsNode,
+                TitlePageNode,
+            ),
+        ):
+            return
+        if isinstance(block, StructuralSectionNode):
+            if not self.config.STRUCTURAL_SECTION["page_break_before"]:
+                self._separate()
+            return
+        if isinstance(block, HeadingNode) and block.level is HeadingLevel.H1:
+            return
+        if isinstance(block, _CONTINUOUS_TEXT_BLOCKS) and isinstance(previous_block, _CONTINUOUS_TEXT_BLOCKS):
+            return
+        if isinstance(block, TableNode) and isinstance(previous_block, TableCaptionNode):
+            return
+        if isinstance(block, (BibliographyEntryNode, SourceRecordNode)) and isinstance(
+            previous_block, (BibliographyEntryNode, SourceRecordNode)
+        ):
+            return
+        if (
+            isinstance(block, FormulaNode)
+            and isinstance(previous_block, FormulaNode)
+            and block.consecutive_with
+            and block.consecutive_with == previous_block.id
+        ):
+            return
+        self._separate()
+
+    def _insert_image(self, image_path=None, caption=None, *, explanatory_data=None):
         if image_path:
             full_path = self._resolve_image_path(image_path)
             if not full_path.exists():
@@ -472,19 +569,11 @@ class DocxRenderer(RendererPort):
                     if docx_styles.FIGURE_PLACEHOLDER in [s.name for s in self.doc.styles]:
                         p.style = self.doc.styles[docx_styles.FIGURE_PLACEHOLDER]
 
-            if self.doc.paragraphs:
-                self.doc.paragraphs[-1].paragraph_format.space_before = one_line
-
         self._add_figure_explanatory_data(explanatory_data)
 
         if caption:
             p = self.doc.add_paragraph(caption)
             self._set_paragraph_format(p, "caption_img")
-            if not image_path:
-                p.paragraph_format.space_before = one_line
-            p.paragraph_format.space_after = one_line
-        elif self.doc.paragraphs:
-            self.doc.paragraphs[-1].paragraph_format.space_after = one_line
         self._rendered_body_blocks = True
 
     def _add_figure_explanatory_data(self, explanatory_data) -> None:
@@ -503,19 +592,6 @@ class DocxRenderer(RendererPort):
             return None
         cells = [cell.strip() for cell in line.split("|")[1:-1]]
         return cells if cells else None
-
-    def _caption_space_before(self):
-        """No leading gap when a table caption follows a heading (heading already has it)."""
-        paragraphs = self.doc.paragraphs
-        if len(paragraphs) >= 2:
-            name = paragraphs[-2].style.name
-            if name.startswith("Heading") or name in (
-                "SFUStructuralHeading",
-                "SFUAppendixHeading",
-                "SFUTOCHeading",
-            ):
-                return Pt(0)
-        return self._spacing_points(self.config.EMPTY_BEFORE_TABLE)
 
     def _prevent_row_split(self, row) -> None:
         """Forbid a table row from breaking across pages mid-cell."""
@@ -541,10 +617,7 @@ class DocxRenderer(RendererPort):
         if caption:
             p = self.doc.add_paragraph(caption)
             self._set_paragraph_format(p, "caption_table")
-            p.paragraph_format.space_before = self._caption_space_before()
             p.paragraph_format.keep_with_next = True
-        else:
-            self._add_empty_paragraph("empty_before_table")
 
         table_cfg = self.config.TABLE
         num_cols = len(rows_data[0])
@@ -591,7 +664,6 @@ class DocxRenderer(RendererPort):
         for note in notes:
             self._append_table_note_row(table, note)
 
-        self._add_empty_paragraph("empty_after_table")
         self._rendered_body_blocks = True
 
     def _render_table(self, block: TableNode):
@@ -854,6 +926,7 @@ class DocxRenderer(RendererPort):
         self._add_page_numbering()
         self._section_numberer.reset()
         self._rendered_body_blocks = False
+        self._in_bibliography_section = False
         self._template_mode = template_mode
         self._skip_generated_front_matter = skip_generated_front_matter
         self._title_page_emitted = False
@@ -1010,6 +1083,16 @@ class DocxRenderer(RendererPort):
                 auto_toc_pending = False
 
             if isinstance(block, StructuralSectionNode):
+                self._in_bibliography_section = (
+                    block.section_type is StructuralSectionType.SOURCES
+                    or _is_sources_title(block.title)
+                )
+            elif isinstance(block, HeadingNode) and block.level in (HeadingLevel.H1, HeadingLevel.H2):
+                self._in_bibliography_section = _is_sources_title(block.text)
+
+            self._maybe_separate(block, previous_block)
+
+            if isinstance(block, StructuralSectionNode):
                 self._render_structural_section(block)
             elif isinstance(block, HeadingNode):
                 self._render_heading(block)
@@ -1040,12 +1123,6 @@ class DocxRenderer(RendererPort):
                 self._render_formula(
                     block,
                     trailing_comma=suppress_after,
-                    suppress_before=(
-                        isinstance(previous_block, FormulaNode)
-                        and bool(block.consecutive_with)
-                        and block.consecutive_with == previous_block.id
-                    ),
-                    suppress_after=suppress_after,
                 )
             elif isinstance(block, ListNode):
                 self._render_list(block)
@@ -1094,9 +1171,6 @@ class DocxRenderer(RendererPort):
         p = self.doc.add_paragraph(self._heading_text(block))
         self._set_paragraph_format(p, style_type)
         p.paragraph_format.keep_with_next = True
-        if block.level is HeadingLevel.H2:
-            p.paragraph_format.space_before = self._spacing_points(self.config.EMPTY_BEFORE_HEADER)
-        p.paragraph_format.space_after = self._spacing_points(self.config.EMPTY_AFTER_HEADER)
         self._rendered_body_blocks = True
 
     @staticmethod
@@ -1131,7 +1205,6 @@ class DocxRenderer(RendererPort):
         run = p.add_run(title)
         self._set_paragraph_format(p, "structural_section")
         run.underline = False
-        p.paragraph_format.space_after = self._spacing_points(self.config.EMPTY_AFTER_HEADER)
         p.paragraph_format.keep_with_next = True
         self._rendered_body_blocks = True
 
@@ -1144,7 +1217,7 @@ class DocxRenderer(RendererPort):
         run = p.add_run(title)
         self._set_paragraph_format(p, "structural_section")
         run.underline = False
-        self._add_empty_paragraph("empty_after_header")
+        self._separate()
 
         if self._abbreviation_entries:
             self._create_abbreviations_table(self._abbreviation_entries)
@@ -1321,7 +1394,7 @@ class DocxRenderer(RendererPort):
         heading_run = heading_para.add_run((block.title or "СОДЕРЖАНИЕ").upper())
         self._set_paragraph_format(heading_para, "toc_heading")
         heading_run.underline = False
-        heading_para.paragraph_format.space_after = self._spacing_points(self.config.EMPTY_AFTER_HEADER)
+        self._separate()
 
         toc_para = self.doc.add_paragraph()
         toc_para.paragraph_format.first_line_indent = NO_INDENT_CM
@@ -1427,8 +1500,6 @@ class DocxRenderer(RendererPort):
         block,
         *,
         trailing_comma: bool = False,
-        suppress_before: bool = False,
-        suppress_after: bool = False,
     ):
         """Render a formula on its own line with right-aligned auto-number."""
 
@@ -1438,9 +1509,6 @@ class DocxRenderer(RendererPort):
             number_text = str(block.number)
         if block.id:
             self._formula_numbers_by_id[block.id] = number_text
-
-        if not suppress_before:
-            self._add_empty_paragraph("empty_before_formula")
 
         para = self.doc.add_paragraph()
         self._set_paragraph_format(para, "formula")
@@ -1479,8 +1547,6 @@ class DocxRenderer(RendererPort):
             if not symbol.repeats and symbol.name:
                 self._formula_symbol_numbers.setdefault(symbol.name, number_text)
 
-        if not suppress_after:
-            self._add_empty_paragraph("empty_after_formula")
         self._rendered_body_blocks = True
 
     def _add_footnote_anchor(self, para, anchor: FootnoteAnchor) -> None:
@@ -1722,7 +1788,10 @@ class DocxRenderer(RendererPort):
             )
             p = self.doc.add_paragraph(text)
             self._set_paragraph_format(p, "list_item")
-            apply_word_list(p, block.list_type, level=level, document=self.doc)
+            if block.list_type is ListType.NUMBERED and self._in_bibliography_section:
+                apply_word_bibliography(p, document=self.doc)
+            else:
+                apply_word_list(p, block.list_type, level=level, document=self.doc)
             for child in item.children:
                 self._render_list(child, level=level + 1)
         if block.items:
@@ -1753,6 +1822,18 @@ class DocxRenderer(RendererPort):
             if candidate.exists():
                 return candidate
         return self.base_dir / PathConfig.TEMPLATES_DIR / path
+
+
+def _is_sources_title(text: str | None) -> bool:
+    """Return True for the bibliography section heading (with or without number)."""
+
+    normalized = " ".join((text or "").split()).upper()
+    normalized = re.sub(r"^\d+(?:\.\d+)*\s+", "", normalized)
+    return normalized in {
+        "СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ",
+        "СПИСОК ИСТОЧНИКОВ",
+        "БИБЛИОГРАФИЯ",
+    }
 
 
 def _normalize_list_item_punctuation(
@@ -1940,4 +2021,4 @@ def _footnote_id(marker: str, fallback: int) -> int:
 def _normalize_caption_dashes(text: str) -> str:
     """Replace ASCII hyphens used as dash separators with em-dash (U+2014)."""
 
-    return re.sub(rf"\s[-{EN_DASH}]\s", DASH_SEPARATOR, text)
+    return normalize_dashes(text)

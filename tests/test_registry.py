@@ -227,7 +227,7 @@ def test_heading_blocks_round_trip_through_config():
     assert_close(legacy["H1"]["indent"], Cm(1.25))
     assert legacy["H2"]["align"] == WD_ALIGN_PARAGRAPH.LEFT
     assert legacy["H2"]["bold"] is True
-    assert legacy["H3"]["bold"] is False
+    assert legacy["H3"]["bold"] is True
 
 
 def test_list_item_block_round_trips_through_config():
