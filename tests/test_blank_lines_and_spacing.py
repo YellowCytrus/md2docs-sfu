@@ -258,6 +258,22 @@ def test_regular_numbered_list_keeps_parenthesis_marker(tmp_path):
     assert _marker_texts_for_paragraph(doc, item)[0] == "%1)"
 
 
+def test_bullet_list_uses_short_hyphen_marker(tmp_path):
+    doc = _render(
+        tmp_path,
+        (
+            ListNode(
+                list_type=ListType.BULLET,
+                items=(ListItemNode("Первый пункт."), ListItemNode("Второй пункт.")),
+            ),
+        ),
+        name="bullet_list.docx",
+    )
+
+    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "Первый пункт.")
+    assert _marker_texts_for_paragraph(doc, item) == ["-", "-", "-"]
+
+
 def _paragraph_with_drawing(doc):
     return next(
         paragraph for paragraph in doc.paragraphs if paragraph._p.find(".//" + qn("w:drawing")) is not None
