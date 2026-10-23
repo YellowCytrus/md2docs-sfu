@@ -506,10 +506,24 @@ def build_title_page(title_template: Path, meta: dict) -> list:
                 break
         elements.append(child)
 
+    # Keep exactly one page break and put it on the last title line ("Красноярск
+    # 2026") where the template already has it.  A separate empty paragraph with
+    # a break can spill onto the next page and leave a blank page before the ToC.
+    last_paragraph = next((el for el in reversed(elements) if el.tag == qn("w:p")), None)
     for element in elements:
+        if element is last_paragraph:
+            continue
         for br in element.findall(".//" + qn("w:br")):
             if br.get(qn("w:type")) == "page":
                 br.getparent().remove(br)
+    if last_paragraph is not None and not any(
+        br.get(qn("w:type")) == "page" for br in last_paragraph.findall(".//" + qn("w:br"))
+    ):
+        run = OxmlElement("w:r")
+        br = OxmlElement("w:br")
+        br.set(qn("w:type"), "page")
+        run.append(br)
+        last_paragraph.append(run)
 
     # drop one spacer line before the signature so the title still fits one page
     for index, element in enumerate(elements):
@@ -536,14 +550,35 @@ def _is_page_break_only(el) -> bool:
     return bool(brs) and not text.strip()
 
 
+def _paragraph_text(el) -> str:
+    return "".join(t.text or "" for t in el.findall(".//" + qn("w:t"))).strip()
+
+
 def replace_title_page(doc: Document, title_template: Path, meta: dict) -> None:
     body = doc.element.body
     children = list(body)
-    first_break = next((el for el in children if _is_page_break_only(el)), None)
-    for el in children:
-        body.remove(el)
-        if el is first_break:
-            break
+    # Cut everything up to the ToC heading, so the generated title page, the
+    # metadata paragraph and any standalone page-break paragraphs before the
+    # contents are removed in one go.
+    content_start = next(
+        (
+            el
+            for el in children
+            if el.tag == qn("w:p") and _paragraph_text(el).upper() == "СОДЕРЖАНИЕ"
+        ),
+        None,
+    )
+    if content_start is not None:
+        for el in children:
+            if el is content_start:
+                break
+            body.remove(el)
+    else:
+        first_break = next((el for el in children if _is_page_break_only(el)), None)
+        for el in children:
+            body.remove(el)
+            if el is first_break:
+                break
     for el in reversed(build_title_page(title_template, meta)):
         body.insert(0, deepcopy(el))
 
