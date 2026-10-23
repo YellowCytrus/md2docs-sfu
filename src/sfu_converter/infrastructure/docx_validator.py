@@ -52,6 +52,8 @@ _HEADING_ROLES = {
     ParagraphRole.HEADING_H2,
     ParagraphRole.HEADING_H3,
     ParagraphRole.HEADING_H4,
+    ParagraphRole.HEADING_H5,
+    ParagraphRole.HEADING_H6,
 }
 
 _HEADING_RULE_BY_ROLE = {
@@ -59,6 +61,8 @@ _HEADING_RULE_BY_ROLE = {
     ParagraphRole.HEADING_H2: "common.heading.h2",
     ParagraphRole.HEADING_H3: "common.heading.h3",
     ParagraphRole.HEADING_H4: "common.heading.h4",
+    ParagraphRole.HEADING_H5: "common.heading.h5",
+    ParagraphRole.HEADING_H6: "common.heading.h6",
 }
 
 
@@ -1233,10 +1237,10 @@ class DocxValidator:
 
     def _heading_rule_id(self, paragraph) -> str:
         style_name = paragraph.style.name if paragraph.style else ""
-        if style_name.startswith("Heading 2"):
-            return "common.heading.h2"
-        if style_name.startswith("Heading 3"):
-            return "common.heading.h3"
+        match = re.match(r"Heading (\d+)$", style_name)
+        if match is not None:
+            level = max(1, min(int(match.group(1)), 6))
+            return f"common.heading.h{level}"
         return "common.heading.h1"
 
     def _rule(self, rule_id: str) -> FormattingRule:
@@ -1481,7 +1485,12 @@ def _docx_h3_groups(entries: list[tuple[int, ParagraphRole]]) -> list[list[tuple
                 groups.append(current)
                 current = []
             continue
-        if role in {ParagraphRole.HEADING_H3, ParagraphRole.HEADING_H4}:
+        if role in {
+            ParagraphRole.HEADING_H3,
+            ParagraphRole.HEADING_H4,
+            ParagraphRole.HEADING_H5,
+            ParagraphRole.HEADING_H6,
+        }:
             current.append(entry)
     if current:
         groups.append(current)
@@ -1519,6 +1528,8 @@ _APPENDIX_HEADING_PREFIX_BY_ROLE = {
     ParagraphRole.HEADING_H2: "{letter}.",
     ParagraphRole.HEADING_H3: "{letter}.",
     ParagraphRole.HEADING_H4: "{letter}.",
+    ParagraphRole.HEADING_H5: "{letter}.",
+    ParagraphRole.HEADING_H6: "{letter}.",
 }
 
 

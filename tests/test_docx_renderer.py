@@ -151,9 +151,21 @@ def test_section_numberer_tracks_subpoint_level_four():
     assert numberer.next_number(4) == "2.1.1.1"
 
 
+def test_section_numberer_tracks_subpoint_levels_five_and_six():
+    numberer = SectionNumberer()
+
+    assert numberer.next_number(1) == "1"
+    assert numberer.next_number(2) == "1.1"
+    assert numberer.next_number(3) == "1.1.1"
+    assert numberer.next_number(4) == "1.1.1.1"
+    assert numberer.next_number(5) == "1.1.1.1.1"
+    assert numberer.next_number(6) == "1.1.1.1.1.1"
+    assert numberer.next_number(1) == "2"
+
+
 def test_section_numberer_rejects_unsupported_levels():
     with pytest.raises(ValueError, match="Unsupported heading level"):
-        SectionNumberer().next_number(5)
+        SectionNumberer().next_number(7)
 
 
 def test_docx_renderer_numbers_h4_subpoints_and_resets(tmp_path):

@@ -1,7 +1,7 @@
 """Section- and appendix-aware numbering for tables, figures, formulas, headings.
 
 Replaces the per-counter scalars previously held on the renderer. A single
-:class:`NumberingContext` instance tracks heading section numbers (H1..H4),
+:class:`NumberingContext` instance tracks heading section numbers (H1..H6),
 the current appendix (if any), and three element counters that may be reset
 per section or scoped per appendix depending on the active
 :class:`NumberingMode`.
@@ -89,11 +89,13 @@ class NumberingContext:
         """
 
         level_value = level.value if isinstance(level, HeadingLevel) else int(level)
-        if level_value < 1 or level_value > len(self._scope.section_numbers):
+        if level_value < 1:
             raise ValueError(f"Unsupported heading level: {level_value}")
 
         index = level_value - 1
         section_numbers = self._scope.section_numbers
+        while len(section_numbers) < level_value:
+            section_numbers.append(0)
 
         for parent_index in range(index):
             if section_numbers[parent_index] == 0:

@@ -42,7 +42,7 @@ def test_syntax_spec_documents_h4_subpoint_level():
     )
 
     assert "[H4]" in v1_heading["description"]
-    assert "4" in v2_heading["description"]
+    assert "6" in v2_heading["description"]
 
 
 def test_explain_syntax_outputs_json_from_syntax_spec(capsys):

@@ -160,10 +160,19 @@ class TestSectionHeadingNumbers:
         assert ctx.next_section_number(HeadingLevel.H3) == "1.1.1"
         assert ctx.next_section_number(HeadingLevel.H4) == "1.1.1.1"
 
+    def test_h5_and_h6_numbering(self):
+        ctx = _ctx()
+        assert ctx.next_section_number(HeadingLevel.H1) == "1"
+        assert ctx.next_section_number(HeadingLevel.H2) == "1.1"
+        assert ctx.next_section_number(HeadingLevel.H3) == "1.1.1"
+        assert ctx.next_section_number(HeadingLevel.H4) == "1.1.1.1"
+        assert ctx.next_section_number(HeadingLevel.H5) == "1.1.1.1.1"
+        assert ctx.next_section_number(HeadingLevel.H6) == "1.1.1.1.1.1"
+
     def test_invalid_level_raises(self):
         ctx = _ctx()
         with pytest.raises(ValueError, match="Unsupported heading level"):
-            ctx.next_section_number(5)
+            ctx.next_section_number(0)
 
 
 class TestBuildNumberingContext:

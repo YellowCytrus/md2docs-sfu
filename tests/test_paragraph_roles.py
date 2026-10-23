@@ -50,11 +50,15 @@ def test_classify_recognises_word_heading_styles():
     h2 = _para(doc, "Подраздел", style_name="Heading 2")
     h3 = _para(doc, "Пункт", style_name="Heading 3")
     h4 = _para(doc, "Подпункт", style_name="Heading 4")
+    h5 = _para(doc, "Подподпункт", style_name="Heading 5")
+    h6 = _para(doc, "Уровень шесть", style_name="Heading 6")
 
     assert classify(h1) is ParagraphRole.HEADING_H1
     assert classify(h2) is ParagraphRole.HEADING_H2
     assert classify(h3) is ParagraphRole.HEADING_H3
     assert classify(h4) is ParagraphRole.HEADING_H4
+    assert classify(h5) is ParagraphRole.HEADING_H5
+    assert classify(h6) is ParagraphRole.HEADING_H6
 
 
 def test_classify_recognises_caption_word_style_for_figure():
@@ -163,10 +167,14 @@ def test_classify_recognises_numbered_headings_by_text():
     h2 = _para(doc, "1.1 Подраздел")
     h3 = _para(doc, "1.1.1 Пункт")
     h4 = _para(doc, "1.1.1.1 Подпункт")
+    h5 = _para(doc, "1.1.1.1.1 Подподпункт")
+    h6 = _para(doc, "1.1.1.1.1.1 Уровень шесть")
     assert classify(h1) is ParagraphRole.HEADING_H1
     assert classify(h2) is ParagraphRole.HEADING_H2
     assert classify(h3) is ParagraphRole.HEADING_H3
     assert classify(h4) is ParagraphRole.HEADING_H4
+    assert classify(h5) is ParagraphRole.HEADING_H5
+    assert classify(h6) is ParagraphRole.HEADING_H6
 
 
 # Map every SFU style the renderer applies to the role the validator expects.

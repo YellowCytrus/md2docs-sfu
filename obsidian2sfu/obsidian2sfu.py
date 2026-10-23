@@ -376,7 +376,7 @@ class MarkdownConverter:
                     continue
                 if title in self.promote_h1:
                     level = 1
-                level = min(level, 4)
+                level = min(level, 6)
                 out.append("")
                 if in_appendix:
                     out.append(f'[H level={level} title="{_esc(title)}"]')

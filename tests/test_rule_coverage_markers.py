@@ -36,6 +36,8 @@
 # rule: common.heading.h2
 # rule: common.heading.h3
 # rule: common.heading.h4
+# rule: common.heading.h5
+# rule: common.heading.h6
 # rule: common.heading.no_hyphenation
 # rule: common.heading.no_period
 # rule: common.heading.point_requires_subpoints

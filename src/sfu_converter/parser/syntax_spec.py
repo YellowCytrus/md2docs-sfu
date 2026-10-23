@@ -92,7 +92,7 @@ _SYNTAX_SPECS = {
                 "name": "heading",
                 "marker": '[H level=1 title="..." number=auto]',
                 "node": "HeadingNode",
-                "description": "Create a heading with explicit level (1-4), title, and numbering mode.",
+                "description": "Create a heading with explicit level (1-6), title, and numbering mode.",
                 "example": '[H level=1 title="Introduction" number=auto]',
             },
             {

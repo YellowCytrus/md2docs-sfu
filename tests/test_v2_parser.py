@@ -251,8 +251,19 @@ def test_v2_parser_accepts_heading_level_four():
     assert heading.text == "Sub"
 
 
-def test_v2_parser_rejects_heading_level_above_four():
-    result = V2Parser().parse('[H level=5 title="Too deep"]')
+def test_v2_parser_accepts_heading_levels_five_and_six():
+    for level in (5, 6):
+        result = V2Parser().parse(f'[H level={level} title="Sub" number=auto]')
+
+        assert result.diagnostics == []
+        heading = result.document.blocks[0]
+        assert isinstance(heading, HeadingNode)
+        assert heading.level.value == level
+        assert heading.text == "Sub"
+
+
+def test_v2_parser_rejects_heading_level_above_six():
+    result = V2Parser().parse('[H level=7 title="Too deep"]')
 
     assert result.document.blocks == ()
     codes = [diagnostic.code for diagnostic in result.diagnostics]

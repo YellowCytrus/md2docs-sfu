@@ -56,7 +56,7 @@ sfu-converter lint --input report.txt --syntax-version 2 --strict
 | `TXT_INVALID_TABLE_SHAPE` | Разное число ячеек в строках таблицы           |
 | `TXT_UNSUPPORTED_SYNTAX`  | Неподдерживаемая версия в `[DOC]`              |
 | `TXT_CYRILLIC_IN_MARKER`  | Кириллические двойники в имени маркера          |
-| `INVALID_HEADING_LEVEL`   | Уровень заголовка вне диапазона 1–4             |
+| `INVALID_HEADING_LEVEL`   | Уровень заголовка вне диапазона 1–6             |
 | `HEADING_LEVEL_SKIPPED`   | Пропущен уровень заголовка                      |
 | `TXT_IMAGE_NOT_FOUND`     | Файл изображения не найден                      |
 

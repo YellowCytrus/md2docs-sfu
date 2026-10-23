@@ -421,7 +421,7 @@ class V2Parser(BaseParser):
             diagnostics.append(
                 Diagnostic(
                     code=DiagnosticCodes.INVALID_HEADING_LEVEL,
-                    message=f"Heading level {level_value} is not allowed (max H4)",
+                    message=f"Heading level {level_value} is not allowed (max H6)",
                     severity=Severity.ERROR,
                     source=span,
                 )

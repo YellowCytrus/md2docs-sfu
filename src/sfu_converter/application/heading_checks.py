@@ -106,7 +106,7 @@ def _h3_groups(headings: tuple[HeadingNode, ...]) -> Iterable[tuple[HeadingNode,
                 yield tuple(current)
                 current = []
             continue
-        if heading.level in {HeadingLevel.H3, HeadingLevel.H4}:
+        if heading.level in {HeadingLevel.H3, HeadingLevel.H4, HeadingLevel.H5, HeadingLevel.H6}:
             current.append(heading)
     if current:
         yield tuple(current)

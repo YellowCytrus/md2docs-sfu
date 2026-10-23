@@ -26,6 +26,8 @@ class ParagraphRole(Enum):
     HEADING_H2 = auto()
     HEADING_H3 = auto()
     HEADING_H4 = auto()
+    HEADING_H5 = auto()
+    HEADING_H6 = auto()
     STRUCTURAL_HEADING = auto()
     TOC_HEADING = auto()
     TOC_ENTRY = auto()
@@ -46,7 +48,9 @@ class ParagraphRole(Enum):
 
 _TABLE_CAPTION_RE = re.compile(r"^\s*(Таблица|Продолжение таблицы|Окончание таблицы)\s+")
 _FIGURE_CAPTION_RE = re.compile(r"^\s*Рисунок\s+")
-_HEADING_NUMBERED_RE = re.compile(r"^\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?\s+\S")
+_HEADING_NUMBERED_RE = re.compile(
+    r"^\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?\s+\S"
+)
 _LIST_ITEM_RE = re.compile(r"^\s*(?:[аА-яА-Я]\)|\d+\)|[-—–])\s")
 _PLACEHOLDER_RE = re.compile(r"^\s*\[\s*(?:Изображение|Image|Ошибка)")
 _TOC_PLACEHOLDER_RE = re.compile(r"^\s*Обновите оглавление\b", re.IGNORECASE)
@@ -146,6 +150,8 @@ def classify(
             2: ParagraphRole.HEADING_H2,
             3: ParagraphRole.HEADING_H3,
             4: ParagraphRole.HEADING_H4,
+            5: ParagraphRole.HEADING_H5,
+            6: ParagraphRole.HEADING_H6,
         }[depth]
 
     return ParagraphRole.BODY
@@ -179,6 +185,10 @@ def _classify_by_word_style(style_name: str) -> ParagraphRole | None:
         return ParagraphRole.HEADING_H3
     if style_name.startswith("Heading 4"):
         return ParagraphRole.HEADING_H4
+    if style_name.startswith("Heading 5"):
+        return ParagraphRole.HEADING_H5
+    if style_name.startswith("Heading 6"):
+        return ParagraphRole.HEADING_H6
     if style_name.startswith("TOC "):
         return ParagraphRole.TOC_ENTRY
     if style_name == "Caption":

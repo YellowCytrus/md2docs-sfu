@@ -131,14 +131,19 @@ _FIGURE_KEEP_STYLES = frozenset(
 
 
 class SectionNumberer:
-    """Tracks hierarchical section numbers for H1-H4 headings."""
+    """Tracks hierarchical section numbers for H1-H6 headings."""
+
+    _MAX_LEVEL = 6
 
     def __init__(self):
-        self._counters = [0, 0, 0, 0]
+        self.reset()
 
     def next_number(self, level: int) -> str:
-        if level < 1 or level > len(self._counters):
+        if level < 1 or level > self._MAX_LEVEL:
             raise ValueError(f"Unsupported heading level: {level}")
+
+        while len(self._counters) < level:
+            self._counters.append(0)
 
         index = level - 1
         for parent_index in range(index):
@@ -152,7 +157,7 @@ class SectionNumberer:
         return ".".join(str(part) for part in self._counters[:level])
 
     def reset(self):
-        self._counters = [0, 0, 0, 0]
+        self._counters = [0] * self._MAX_LEVEL
 
 
 class DocxRenderer(RendererPort):
@@ -164,7 +169,9 @@ class DocxRenderer(RendererPort):
         self.doc = None
         self.logger = logger or logging.getLogger(__name__)
         self._style_map = self._build_style_map()
-        self._bold_styles = frozenset({"h1", "h2", "h3", "structural_section", "toc_heading", "appendix_heading"})
+        self._bold_styles = frozenset(
+            {"h1", "h2", "h3", "h4", "h5", "h6", "structural_section", "toc_heading", "appendix_heading"}
+        )
         self._section_numberer = SectionNumberer()
         self._rendered_body_blocks = False
         self._in_bibliography_section = False
@@ -299,6 +306,22 @@ class DocxRenderer(RendererPort):
                 "space_before": cfg.H4["space_before"],
                 "space_after": cfg.H4["space_after"],
             },
+            "h5": {
+                "word_style": "Heading 5",
+                "align": cfg.H5["align"],
+                "indent": cfg.H5["indent"],
+                "line_spacing": cfg.H5["line_spacing"],
+                "space_before": cfg.H5["space_before"],
+                "space_after": cfg.H5["space_after"],
+            },
+            "h6": {
+                "word_style": "Heading 6",
+                "align": cfg.H6["align"],
+                "indent": cfg.H6["indent"],
+                "line_spacing": cfg.H6["line_spacing"],
+                "space_before": cfg.H6["space_before"],
+                "space_after": cfg.H6["space_after"],
+            },
             "list_item": {
                 "align": cfg.LIST_ITEM["align"],
                 "indent": cfg.LIST_ITEM["indent"],
@@ -432,6 +455,15 @@ class DocxRenderer(RendererPort):
             },
         }
 
+    @staticmethod
+    def _is_heading_style(style_type: str) -> bool:
+        """Any ``hN`` style type is a heading and must be rendered bold."""
+        return (
+            isinstance(style_type, str)
+            and style_type.startswith("h")
+            and style_type[1:].isdigit()
+        )
+
     def _set_paragraph_format(self, para, style_type="normal"):
         style = self._style_map.get(style_type)
         if style is None:
@@ -459,7 +491,7 @@ class DocxRenderer(RendererPort):
 
         if not para.runs:
             para.add_run()
-        bold = style_type in self._bold_styles
+        bold = style_type in self._bold_styles or self._is_heading_style(style_type)
         for run in para.runs:
             self._set_run_style(run, bold=bold)
 
@@ -1249,12 +1281,7 @@ class DocxRenderer(RendererPort):
         if block.level is HeadingLevel.H1 and self._rendered_body_blocks:
             self.doc.add_page_break()
 
-        style_type = {
-            HeadingLevel.H1: "h1",
-            HeadingLevel.H2: "h2",
-            HeadingLevel.H3: "h3",
-            HeadingLevel.H4: "h4",
-        }[block.level]
+        style_type = f"h{block.level.value}"
         p = self.doc.add_paragraph(self._heading_text(block))
         self._set_paragraph_format(p, style_type)
         p.paragraph_format.keep_with_next = True
@@ -2093,7 +2120,7 @@ def _is_generated_front_matter_block(block) -> bool:
 
 
 def _apply_toc_style(document, paragraph, level: int) -> None:
-    style_name = f"TOC {max(1, min(level, 4))}"
+    style_name = f"TOC {max(1, min(level, 6))}"
     try:
         paragraph.style = document.styles[style_name]
         return

@@ -124,7 +124,7 @@ structural sections and numbered chapters:
 3. Every body line wrapped in `[P]` (or another marker) — no bare prose.
 4. Close every block: `[TABLE_END]`, `[LIST_END]`, `[FORMULA_END]`, `[RAW_END]`,
    `[/SOURCE]` (for `type=`), `[/SECTION]`, `[/FN_BODY]`.
-5. Heading levels 1–4 only; quote values with spaces (`title="Ход работы"`).
+5. Heading levels 1–6 only; quote values with spaces (`title="Ход работы"`).
 6. A subdivided heading needs ≥2 sub-points (4.1 **and** 4.2).
 7. Unique `id`s; reference each figure with `[REF target=fig:…]`.
 8. Code / literal `[...]` inside `[RAW]…[RAW_END]`.
