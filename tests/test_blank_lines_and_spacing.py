@@ -6,6 +6,7 @@ from docx import Document as DocxDocument
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 from docx.text.paragraph import Paragraph
+from PIL import Image
 
 from sfu_converter.domain.ast_nodes import (
     BibliographyEntryNode,
@@ -255,3 +256,84 @@ def test_regular_numbered_list_keeps_parenthesis_marker(tmp_path):
 
     item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "Первый пункт.")
     assert _marker_texts_for_paragraph(doc, item)[0] == "%1)"
+
+
+def _paragraph_with_drawing(doc):
+    return next(
+        paragraph for paragraph in doc.paragraphs if paragraph._p.find(".//" + qn("w:drawing")) is not None
+    )
+
+
+def test_heading_keeps_with_next_through_blank_line(tmp_path):
+    doc = _render(
+        tmp_path,
+        (
+            ParagraphNode(runs=(TextRun("Текст до."),)),
+            HeadingNode(level=HeadingLevel.H2, text="Раздел", number="auto"),
+            ParagraphNode(runs=(TextRun("Текст после."),)),
+        ),
+        name="keep_heading.docx",
+    )
+
+    texts = [paragraph.text for paragraph in doc.paragraphs]
+    heading = doc.paragraphs[texts.index("1.1 Раздел")]
+    assert heading.paragraph_format.keep_with_next is True
+    assert heading.paragraph_format.keep_together is True
+
+    blank_after = doc.paragraphs[texts.index("1.1 Раздел") + 1]
+    assert blank_after.text == ""
+    assert blank_after.paragraph_format.keep_with_next is True
+
+    blank_before = doc.paragraphs[texts.index("1.1 Раздел") - 1]
+    assert blank_before.text == ""
+    assert blank_before.paragraph_format.keep_with_next is not True
+
+
+def test_sources_heading_keeps_with_next_through_blank_line(tmp_path):
+    doc = _render(
+        tmp_path,
+        (
+            StructuralSectionNode(
+                section_type=StructuralSectionType.SOURCES,
+                title="СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ",
+            ),
+            BibliographyEntryNode(number=1, text="Первый источник."),
+        ),
+        name="keep_sources.docx",
+    )
+
+    texts = [paragraph.text for paragraph in doc.paragraphs]
+    heading = doc.paragraphs[texts.index("СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ")]
+    assert heading.paragraph_format.keep_with_next is True
+    blank_after = doc.paragraphs[texts.index("СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ") + 1]
+    assert blank_after.text == ""
+    assert blank_after.paragraph_format.keep_with_next is True
+
+
+def test_heading_with_figure_keeps_image_and_caption_together(tmp_path):
+    images = tmp_path / "images"
+    images.mkdir()
+    Image.new("RGB", (20, 10), color="white").save(str(images / "figure.png"))
+
+    doc = _render(
+        tmp_path,
+        (
+            HeadingNode(level=HeadingLevel.H2, text="Схема", number="auto"),
+            FigureNode(src="figure.png", caption="Схема процесса", id="fig:one"),
+        ),
+        name="keep_figure.docx",
+    )
+
+    texts = [paragraph.text for paragraph in doc.paragraphs]
+    heading = doc.paragraphs[texts.index("1.1 Схема")]
+    assert heading.paragraph_format.keep_with_next is True
+
+    blank_after = doc.paragraphs[texts.index("1.1 Схема") + 1]
+    assert blank_after.text == ""
+    assert blank_after.paragraph_format.keep_with_next is True
+
+    image_paragraph = _paragraph_with_drawing(doc)
+    assert image_paragraph.paragraph_format.keep_with_next is True
+
+    caption = doc.paragraphs[texts.index("Рисунок 1.1 — Схема процесса")]
+    assert caption.paragraph_format.keep_with_next is not True

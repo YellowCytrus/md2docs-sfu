@@ -13,6 +13,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
+from docx.text.paragraph import Paragraph
 
 from sfu_converter.config import PathConfig, SIBFUConfig
 from sfu_converter.domain.ast_nodes import (
@@ -118,6 +119,16 @@ _ITALIC_LETTER_RE = re.compile(r"^[A-Za-zα-ωΑ-Ω]$")
 # separated by blank lines (СТУ: сплошной текст).
 _CONTINUOUS_TEXT_BLOCKS = (ParagraphNode, ListNode, RawBlockNode, ReferenceNode)
 
+# Paragraphs that belong to a figure and must stay on the same page as the
+# drawing itself.
+_FIGURE_KEEP_STYLES = frozenset(
+    {
+        docx_styles.FIGURE_CAPTION,
+        docx_styles.FIGURE_EXPLANATORY,
+        docx_styles.FIGURE_PLACEHOLDER,
+    }
+)
+
 
 class SectionNumberer:
     """Tracks hierarchical section numbers for H1-H4 headings."""
@@ -157,6 +168,7 @@ class DocxRenderer(RendererPort):
         self._section_numberer = SectionNumberer()
         self._rendered_body_blocks = False
         self._in_bibliography_section = False
+        self._heading_paragraphs: list[Paragraph] = []
         self._math = LatexMathConverter(logger=self.logger)
 
     def render(
@@ -179,6 +191,7 @@ class DocxRenderer(RendererPort):
         self._prefetch_display_math(document)
         self._render_from_ast(document)
         self._render_inline_math()
+        self._enforce_keep_with_next()
         buffer = BytesIO()
         self.doc.save(buffer)
         return patch_docx_bytes(buffer.getvalue(), self._rendered_footnotes)
@@ -208,6 +221,7 @@ class DocxRenderer(RendererPort):
         self._prefetch_display_math(document)
         self._render_from_ast(document)
         self._render_inline_math()
+        self._enforce_keep_with_next()
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         self.doc.save(str(destination))
@@ -540,6 +554,78 @@ class DocxRenderer(RendererPort):
         ):
             return
         self._separate()
+
+    @staticmethod
+    def _is_separator_paragraph(element) -> bool:
+        """Return True for an empty paragraph that only adds vertical space."""
+
+        if element.find(".//" + qn("w:drawing")) is not None:
+            return False
+        if element.find(".//" + qn("w:br")) is not None:
+            return False
+        p_pr = element.find(qn("w:pPr"))
+        if p_pr is not None and p_pr.find(qn("w:sectPr")) is not None:
+            return False
+        text = "".join(node.text or "" for node in element.iter(qn("w:t")))
+        return not text.strip()
+
+    def _enforce_keep_with_next(self) -> None:
+        """Keep headings attached to the block that follows them.
+
+        DOCX carries no pagination data, so a heading can only be prevented
+        from ending up alone at the bottom of a page through Word's native
+        keep-with-next flag. The renderer inserts one blank paragraph after
+        every heading (rule ``common.heading.spacing_after``); that separator
+        has to carry the flag as well, otherwise the chain stops at the empty
+        paragraph and the heading is still orphaned.
+        """
+
+        if self.doc is None:
+            return
+
+        for paragraph in self._heading_paragraphs:
+            paragraph.paragraph_format.keep_with_next = True
+            paragraph.paragraph_format.keep_together = True
+            cursor = paragraph._p
+            while True:
+                sibling = cursor.getnext()
+                if sibling is None or sibling.tag != qn("w:p"):
+                    break
+                if not self._is_separator_paragraph(sibling):
+                    break
+                Paragraph(sibling, self.doc).paragraph_format.keep_with_next = True
+                cursor = sibling
+
+        self._keep_figures_with_captions()
+
+    def _keep_figures_with_captions(self) -> None:
+        """Keep a drawing on the same page as its caption and explanations."""
+
+        if self.doc is None:
+            return
+        body = self.doc.element.body
+        for element in list(body.iterchildren(qn("w:p"))):
+            if element.find(".//" + qn("w:drawing")) is None:
+                continue
+            chain = [element]
+            cursor = element
+            while True:
+                sibling = cursor.getnext()
+                if sibling is None or sibling.tag != qn("w:p"):
+                    break
+                if self._is_separator_paragraph(sibling):
+                    chain.append(sibling)
+                    cursor = sibling
+                    continue
+                style_name = getattr(Paragraph(sibling, self.doc).style, "name", "")
+                if style_name not in _FIGURE_KEEP_STYLES:
+                    break
+                for item in chain:
+                    Paragraph(item, self.doc).paragraph_format.keep_with_next = True
+                if style_name == docx_styles.FIGURE_CAPTION:
+                    break
+                chain = [sibling]
+                cursor = sibling
 
     def _insert_image(self, image_path=None, caption=None, *, explanatory_data=None):
         if image_path:
@@ -927,6 +1013,7 @@ class DocxRenderer(RendererPort):
         self._section_numberer.reset()
         self._rendered_body_blocks = False
         self._in_bibliography_section = False
+        self._heading_paragraphs = []
         self._template_mode = template_mode
         self._skip_generated_front_matter = skip_generated_front_matter
         self._title_page_emitted = False
@@ -1171,6 +1258,7 @@ class DocxRenderer(RendererPort):
         p = self.doc.add_paragraph(self._heading_text(block))
         self._set_paragraph_format(p, style_type)
         p.paragraph_format.keep_with_next = True
+        self._heading_paragraphs.append(p)
         self._rendered_body_blocks = True
 
     @staticmethod
@@ -1206,6 +1294,7 @@ class DocxRenderer(RendererPort):
         self._set_paragraph_format(p, "structural_section")
         run.underline = False
         p.paragraph_format.keep_with_next = True
+        self._heading_paragraphs.append(p)
         self._rendered_body_blocks = True
 
     def _render_abbreviations_section(self, block):
@@ -1217,6 +1306,7 @@ class DocxRenderer(RendererPort):
         run = p.add_run(title)
         self._set_paragraph_format(p, "structural_section")
         run.underline = False
+        self._heading_paragraphs.append(p)
         self._separate()
 
         if self._abbreviation_entries:
@@ -1332,6 +1422,7 @@ class DocxRenderer(RendererPort):
         heading_run = heading_para.add_run(heading_text.upper())
         self._set_paragraph_format(heading_para, "appendix_heading")
         heading_run.underline = False
+        self._heading_paragraphs.append(heading_para)
 
         if block.appendix_type:
             type_para = self.doc.add_paragraph()
@@ -1339,6 +1430,7 @@ class DocxRenderer(RendererPort):
             self._set_paragraph_format(type_para, "caption_img")
             type_run.bold = False
             type_run.italic = False
+            self._heading_paragraphs.append(type_para)
 
         if block.subtitle:
             self._add_empty_paragraph("empty_after_header")
@@ -1346,6 +1438,7 @@ class DocxRenderer(RendererPort):
             subtitle_run = subtitle_para.add_run(block.subtitle)
             self._set_paragraph_format(subtitle_para, "structural_section")
             subtitle_run.underline = False
+            self._heading_paragraphs.append(subtitle_para)
 
         heading_para.paragraph_format.space_after = self._spacing_points(self.config.EMPTY_AFTER_HEADER)
         heading_para.paragraph_format.keep_with_next = True
@@ -1379,6 +1472,7 @@ class DocxRenderer(RendererPort):
         run = paragraph.add_run(text)
         self._set_paragraph_format(paragraph, "appendix_heading")
         run.underline = False
+        self._heading_paragraphs.append(paragraph)
 
     def _render_table_of_contents(self, block, *, field: TocField | None = None):
         """Insert a ``СОДЕРЖАНИЕ`` heading and a Word TOC field.
@@ -1394,6 +1488,7 @@ class DocxRenderer(RendererPort):
         heading_run = heading_para.add_run((block.title or "СОДЕРЖАНИЕ").upper())
         self._set_paragraph_format(heading_para, "toc_heading")
         heading_run.underline = False
+        self._heading_paragraphs.append(heading_para)
         self._separate()
 
         toc_para = self.doc.add_paragraph()
