@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -728,23 +729,166 @@ def _uno_module():
     return None
 
 
-def _layout_table_pages(docx_path: Path, port: int) -> dict[str, list[int]] | None:
-    """Ask LibreOffice's layout engine for the real page of every table row.
+def _libreoffice_program_dir(soffice: str | None) -> Path | None:
+    if not soffice:
+        return None
+    program = Path(soffice).resolve().parent
+    return program if program.is_dir() else None
 
-    Returns ``{table_name: [page per row]}`` or ``None`` when the engine is
-    unavailable. These are the numbers the engine actually paginated to — not an
-    estimate — so a table is only ever split where it really does cross a page.
+
+def _uno_python(soffice: str | None) -> str | None:
+    """Interpreter that can ``import uno``; used when in-process pyuno is missing.
+
+    Linux distros ship pyuno for the system interpreter, so the venv can borrow
+    it. LibreOffice on Windows instead bundles its own bindings in
+    ``program/python.exe`` built for that exact interpreter — the venv's Python
+    can never import them — so the layout query has to run there.
     """
 
-    uno = _uno_module()
-    if uno is None:
-        return None
+    candidates: list[Path] = []
+    program = _libreoffice_program_dir(soffice)
+    if os.name == "nt":
+        if program is not None:
+            candidates.append(program / "python.exe")
+        for root in (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)")):
+            if root:
+                candidates.append(Path(root) / "LibreOffice" / "program" / "python.exe")
+    else:
+        if program is not None:
+            candidates.append(program / "python")
+        candidates.extend([Path("/usr/bin/python3"), Path("/usr/local/bin/python3")])
 
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            probe = subprocess.run(
+                [str(candidate), "-c", "import uno"],
+                capture_output=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0:
+            return str(candidate)
+    return None
+
+
+# Runs inside an interpreter that has pyuno: connects to the soffice instance the
+# caller started, asks it for the page of every table row, prints JSON.
+_UNO_LAYOUT_SCRIPT = r"""
+import json
+import os
+import sys
+import time
+
+# LibreOffice keeps uno.py and pyuno next to its bundled python.exe.
+_program = os.path.dirname(os.path.abspath(sys.executable))
+if _program not in sys.path:
+    sys.path.insert(0, _program)
+if os.name == "nt" and hasattr(os, "add_dll_directory") and os.path.isdir(_program):
+    os.add_dll_directory(_program)
+
+import uno
+from com.sun.star.beans import PropertyValue
+
+
+def _prop(name, value):
+    item = PropertyValue()
+    item.Name = name
+    item.Value = value
+    return item
+
+
+def main():
+    port = int(sys.argv[1])
+    docx = sys.argv[2]
+
+    local_context = uno.getComponentContext()
+    resolver = local_context.ServiceManager.createInstanceWithContext(
+        "com.sun.star.bridge.UnoUrlResolver", local_context
+    )
+    url = "uno:socket,host=127.0.0.1,port=%d;urp;StarOffice.ComponentContext" % port
+    context = None
+    for _ in range(120):
+        try:
+            context = resolver.resolve(url)
+            break
+        except Exception:
+            time.sleep(0.5)
+    if context is None:
+        return 1
+
+    desktop = context.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", context
+    )
+    document = desktop.loadComponentFromURL(
+        uno.systemPathToFileUrl(docx),
+        "_blank",
+        0,
+        (_prop("Hidden", True), _prop("ReadOnly", True)),
+    )
+    if document is None:
+        return 1
+
+    try:
+        cursor = document.CurrentController.getViewCursor()
+        tables = document.getTextTables()
+        layout = {}
+        for index in range(tables.getCount()):
+            table = tables.getByIndex(index)
+            rows = table.getRows()
+            pages = []
+            for row_index in range(rows.getCount()):
+                cell = table.getCellByName("A%d" % (row_index + 1))
+                text_cursor = cell.getText().createTextCursor()
+                text_cursor.gotoStart(False)
+                cursor.gotoRange(text_cursor, False)
+                pages.append(cursor.getPage())
+            layout[table.getName()] = pages
+    finally:
+        document.close(False)
+
+    print(json.dumps(layout))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
+
+def _layout_via_subprocess(
+    python: str, docx_path: Path, port: int
+) -> dict[str, list[int]] | None:
+    try:
+        completed = subprocess.run(
+            [python, "-c", _UNO_LAYOUT_SCRIPT, str(port), str(docx_path.resolve())],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    lines = [line for line in completed.stdout.splitlines() if line.strip()]
+    if not lines:
+        return None
+    try:
+        raw = json.loads(lines[-1])
+    except ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return {str(name): [int(page) for page in pages] for name, pages in raw.items()}
+
+
+def _layout_in_process(
+    uno, docx_path: Path, port: int
+) -> dict[str, list[int]] | None:
     from com.sun.star.beans import PropertyValue  # noqa: PLC0415
-
-    soffice = _find_libreoffice()
-    if soffice is None:
-        return None
 
     def prop(name, value):
         item = PropertyValue()
@@ -752,19 +896,7 @@ def _layout_table_pages(docx_path: Path, port: int) -> dict[str, list[int]] | No
         item.Value = value
         return item
 
-    process = subprocess.Popen(
-        [
-            soffice,
-            "--headless",
-            "--norestore",
-            "--invisible",
-            f"--accept=socket,host=127.0.0.1,port={port};urp;",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
     document = None
-    desktop = None
     try:
         local_context = uno.getComponentContext()
         resolver = local_context.ServiceManager.createInstanceWithContext(
@@ -816,16 +948,54 @@ def _layout_table_pages(docx_path: Path, port: int) -> dict[str, list[int]] | No
                 document.close(False)
             except Exception:  # noqa: BLE001
                 pass
-        if desktop is not None:
-            try:
-                desktop.terminate()
-            except Exception:  # noqa: BLE001
-                pass
+
+
+def _layout_table_pages(docx_path: Path, port: int) -> dict[str, list[int]] | None:
+    """Ask LibreOffice's layout engine for the real page of every table row.
+
+    Returns ``{table_name: [page per row]}`` or ``None`` when the engine is
+    unavailable. These are the numbers the engine actually paginated to — not an
+    estimate — so a table is only ever split where it really does cross a page.
+    """
+
+    soffice = _find_libreoffice()
+    if soffice is None:
+        return None
+
+    uno = _uno_module()
+    python = None if uno is not None else _uno_python(soffice)
+    if uno is None and python is None:
+        return None
+
+    # A dedicated profile keeps the headless instance out of the way of an
+    # already-open LibreOffice, which would otherwise swallow the socket flag.
+    profile = Path(tempfile.mkdtemp(prefix="sfu-layout-"))
+    process = subprocess.Popen(
+        [
+            soffice,
+            f"-env:UserInstallation={profile.as_uri()}",
+            "--headless",
+            "--norestore",
+            "--nodefault",
+            "--invisible",
+            f"--accept=socket,host=127.0.0.1,port={port};urp;",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        if uno is not None:
+            return _layout_in_process(uno, docx_path, port)
+        assert python is not None  # guarded above
+        return _layout_via_subprocess(python, docx_path, port)
+    finally:
         process.terminate()
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
+            process.wait(timeout=5)
+        shutil.rmtree(profile, ignore_errors=True)
 
 
 def _clone_table_with_rows(template_tbl, rows):
@@ -952,10 +1122,21 @@ def reflow_tables(stage: Path, workdir: Path, max_passes: int = 40) -> None:
     """
 
     if _find_libreoffice() is None:
+        print(
+            "[!] LibreOffice не найден — таблицы не разбиваются по страницам, "
+            "подписи «Продолжение/Окончание таблицы» не добавляются"
+        )
         return
 
     for pass_index in range(max_passes):
         row_pages = _layout_table_pages(stage, port=2100 + pass_index)
+        if row_pages is None:
+            if pass_index == 0:
+                print(
+                    "[!] Не удалось запросить разметку у LibreOffice (нужен pyuno) — "
+                    "разбиение таблиц пропущено"
+                )
+            break
         if not row_pages:
             break
         row_pages = list(row_pages.values())
@@ -1010,10 +1191,42 @@ def finalize_table_captions(stage: Path) -> None:
 
 
 def _find_libreoffice() -> str | None:
+    """Locate LibreOffice, including installs that are not on ``PATH``.
+
+    Windows installers do not put ``soffice.exe`` on ``PATH`` by default, so a
+    ``shutil.which``-only lookup silently disables table splitting and its
+    continuation captions there.
+    """
+
     for name in ("libreoffice", "soffice", "soffice.exe"):
         found = shutil.which(name)
         if found:
             return found
+
+    candidates: list[Path] = []
+    if os.name == "nt":
+        for root in (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)")):
+            if root:
+                candidates.append(Path(root) / "LibreOffice" / "program" / "soffice.exe")
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            candidates.append(
+                Path(local) / "Programs" / "LibreOffice" / "program" / "soffice.exe"
+            )
+    elif sys.platform == "darwin":
+        candidates.append(Path("/Applications/LibreOffice.app/Contents/MacOS/soffice"))
+    else:
+        candidates.extend(
+            [
+                Path("/usr/lib/libreoffice/program/soffice"),
+                Path("/usr/lib64/libreoffice/program/soffice"),
+                Path("/opt/libreoffice/program/soffice"),
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
     return None
 
 
