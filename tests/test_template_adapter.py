@@ -194,6 +194,49 @@ def test_compose_preserves_template_page_break_before_generated(tmp_path):
     assert 'w:type="page"' in body_xml
 
 
+def test_compose_attaches_separator_break_to_last_template_paragraph(tmp_path):
+    template_path = _new_template(tmp_path, pages=1)
+    adapter = DocxTemplateAdapter(base_dir=tmp_path)
+    template = adapter.load_template(str(template_path))
+    insertion = adapter.find_insertion_point(template, mode="append")
+
+    composed_bytes = adapter.compose(
+        template, insertion, _generated_doc_bytes("Generated content")
+    )
+
+    composed = DocxDocument(BytesIO(composed_bytes))
+    break_only = [
+        paragraph
+        for paragraph in composed.paragraphs
+        if not paragraph.text.strip()
+        and any(br.get(qn("w:type")) == "page" for br in paragraph._p.iter(qn("w:br")))
+    ]
+    assert break_only == []
+    last_template = next(paragraph for paragraph in composed.paragraphs if paragraph.text == "Template page 1")
+    assert any(br.get(qn("w:type")) == "page" for br in last_template._p.iter(qn("w:br")))
+
+
+def test_compose_does_not_double_break_after_anchor_that_already_breaks(tmp_path):
+    template_path = _new_template(tmp_path, pages=2)
+    adapter = DocxTemplateAdapter(base_dir=tmp_path)
+    template = adapter.load_template(str(template_path))
+    insertion = adapter.find_insertion_point(template, mode="preserve-prefix", page=1)
+    assert insertion.element is not None
+
+    composed_bytes = adapter.compose(
+        template, insertion, _generated_doc_bytes("Generated body")
+    )
+
+    composed = DocxDocument(BytesIO(composed_bytes))
+    page_breaks = [
+        br
+        for paragraph in composed.paragraphs
+        for br in paragraph._p.iter(qn("w:br"))
+        if br.get(qn("w:type")) == "page"
+    ]
+    assert len(page_breaks) == 1
+
+
 def test_compose_truncates_template_after_preserve_prefix_anchor(tmp_path):
     template_path = _new_template(tmp_path, pages=2)
     adapter = DocxTemplateAdapter(base_dir=tmp_path)

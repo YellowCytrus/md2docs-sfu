@@ -199,6 +199,7 @@ class DocxRenderer(RendererPort):
         self._render_from_ast(document)
         self._render_inline_math()
         self._enforce_keep_with_next()
+        self._normalize_page_break_paragraphs()
         buffer = BytesIO()
         self.doc.save(buffer)
         return patch_docx_bytes(buffer.getvalue(), self._rendered_footnotes)
@@ -229,6 +230,7 @@ class DocxRenderer(RendererPort):
         self._render_from_ast(document)
         self._render_inline_math()
         self._enforce_keep_with_next()
+        self._normalize_page_break_paragraphs()
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         self.doc.save(str(destination))
@@ -518,6 +520,85 @@ class DocxRenderer(RendererPort):
                 return True
         p_pr = paragraph.find(qn("w:pPr"))
         return p_pr is not None and p_pr.find(qn("w:sectPr")) is not None
+
+    @staticmethod
+    def _is_break_only_paragraph(element) -> bool:
+        """Return True for an empty paragraph that carries only a page break."""
+
+        if element.tag != qn("w:p"):
+            return False
+        return (
+            DocxRenderer._paragraph_has_page_break(element)
+            and not "".join(node.text or "" for node in element.iter(qn("w:t"))).strip()
+            and element.find(".//" + qn("w:drawing")) is None
+            and element.find(".//" + qn("w:sectPr")) is None
+            and element.find(".//" + qn("w:object")) is None
+        )
+
+    @staticmethod
+    def _set_page_break_before(paragraph: Paragraph) -> None:
+        """Start ``paragraph`` on a new page without a separate break paragraph.
+
+        A standalone paragraph that holds nothing but a page break occupies a
+        line of its own. When the preceding content fills the page exactly,
+        that line is pushed onto the next page, the break is applied after it
+        and the result is a fully blank page (only the page number is left).
+        ``w:pageBreakBefore`` has no such line and is idempotent — Word does
+        not add a page when the paragraph already starts one.
+        """
+
+        previous = paragraph._p.getprevious()
+        while previous is not None and previous.tag in (qn("w:bookmarkStart"), qn("w:bookmarkEnd")):
+            previous = previous.getprevious()
+        if previous is None:
+            return
+        paragraph.paragraph_format.page_break_before = True
+
+    @staticmethod
+    def _previous_content_element(element):
+        previous = element.getprevious()
+        while previous is not None and previous.tag in (qn("w:bookmarkStart"), qn("w:bookmarkEnd")):
+            previous = previous.getprevious()
+        return previous
+
+    @staticmethod
+    def _next_content_element(element):
+        following = element.getnext()
+        while following is not None and following.tag in (qn("w:bookmarkStart"), qn("w:bookmarkEnd")):
+            following = following.getnext()
+        return following
+
+    def _normalize_page_break_paragraphs(self) -> None:
+        """Fold standalone page-break paragraphs into their neighbours.
+
+        See :meth:`_set_page_break_before` for the reason. The break is moved
+        onto the next paragraph when possible; otherwise (a table follows, or
+        the break is the last element) it is appended to the preceding
+        paragraph, where it costs no extra line.
+        """
+
+        if self.doc is None:
+            return
+        body = self.doc.element.body
+        for element in list(body.iterchildren(qn("w:p"))):
+            if element.getparent() is None or not self._is_break_only_paragraph(element):
+                continue
+            following = self._next_content_element(element)
+            if following is None:
+                body.remove(element)
+                continue
+            if following.tag == qn("w:p"):
+                self._set_page_break_before(Paragraph(following, self.doc))
+                body.remove(element)
+                continue
+            previous = self._previous_content_element(element)
+            if previous is not None and previous.tag == qn("w:p") and not self._paragraph_has_page_break(previous):
+                run = OxmlElement("w:r")
+                br = OxmlElement("w:br")
+                br.set(qn("w:type"), "page")
+                run.append(br)
+                previous.append(run)
+                body.remove(element)
 
     def _is_at_page_start(self) -> bool:
         last = self._last_body_element()
@@ -1278,12 +1359,13 @@ class DocxRenderer(RendererPort):
                 continue
 
     def _render_heading(self, block):
-        if block.level is HeadingLevel.H1 and self._rendered_body_blocks:
-            self.doc.add_page_break()
+        start_new_page = block.level is HeadingLevel.H1 and self._rendered_body_blocks
 
         style_type = f"h{block.level.value}"
         p = self.doc.add_paragraph(self._heading_text(block))
         self._set_paragraph_format(p, style_type)
+        if start_new_page:
+            self._set_page_break_before(p)
         p.paragraph_format.keep_with_next = True
         self._heading_paragraphs.append(p)
         self._rendered_body_blocks = True
@@ -1312,26 +1394,32 @@ class DocxRenderer(RendererPort):
             self._render_abbreviations_section(block)
             return
 
+        start_new_page = False
         if self.config.STRUCTURAL_SECTION["page_break_before"]:
-            self._start_text_section_or_page_break()
+            start_new_page = self._start_text_section()
 
         title = block.title.upper() if self.config.STRUCTURAL_SECTION["uppercase"] else block.title
         p = self.doc.add_paragraph()
         run = p.add_run(title)
         self._set_paragraph_format(p, "structural_section")
+        if start_new_page:
+            self._set_page_break_before(p)
         run.underline = False
         p.paragraph_format.keep_with_next = True
         self._heading_paragraphs.append(p)
         self._rendered_body_blocks = True
 
     def _render_abbreviations_section(self, block):
+        start_new_page = False
         if self.config.STRUCTURAL_SECTION["page_break_before"]:
-            self._start_text_section_or_page_break()
+            start_new_page = self._start_text_section()
 
         title = block.title.upper() if self.config.STRUCTURAL_SECTION["uppercase"] else block.title
         p = self.doc.add_paragraph()
         run = p.add_run(title)
         self._set_paragraph_format(p, "structural_section")
+        if start_new_page:
+            self._set_page_break_before(p)
         run.underline = False
         self._heading_paragraphs.append(p)
         self._separate()
@@ -1428,6 +1516,7 @@ class DocxRenderer(RendererPort):
         type below, and an optional appendix title separated by one blank line.
         """
 
+        start_new_page = False
         if block.independent:
             self._render_title_page(_appendix_metadata(metadata, block), force=True)
         elif block.sheet_format is not SheetFormat.A4:
@@ -1439,7 +1528,7 @@ class DocxRenderer(RendererPort):
                 SectionSetupNode(sheet_format=block.sheet_format),
             )
         else:
-            self.doc.add_page_break()
+            start_new_page = True
 
         heading_text = block.title or APPENDIX_TITLE
         if block.letter and block.letter not in heading_text:
@@ -1448,6 +1537,8 @@ class DocxRenderer(RendererPort):
         heading_para = self.doc.add_paragraph()
         heading_run = heading_para.add_run(heading_text.upper())
         self._set_paragraph_format(heading_para, "appendix_heading")
+        if start_new_page:
+            self._set_page_break_before(heading_para)
         heading_run.underline = False
         self._heading_paragraphs.append(heading_para)
 
@@ -1489,15 +1580,19 @@ class DocxRenderer(RendererPort):
 
         for page_index, chunk in enumerate(chunks):
             if page_index > 0:
-                self.doc.add_page_break()
                 label = "Окончание" if page_index == len(chunks) - 1 else "Продолжение"
-                self._render_appendix_continuation_label(f"{label} приложения {block.letter}")
+                self._render_appendix_continuation_label(
+                    f"{label} приложения {block.letter}",
+                    start_new_page=True,
+                )
             self._render_from_ast(Document(blocks=chunk, metadata=metadata or {}), allow_auto_toc=False)
 
-    def _render_appendix_continuation_label(self, text: str) -> None:
+    def _render_appendix_continuation_label(self, text: str, *, start_new_page: bool = False) -> None:
         paragraph = self.doc.add_paragraph()
         run = paragraph.add_run(text)
         self._set_paragraph_format(paragraph, "appendix_heading")
+        if start_new_page:
+            self._set_page_break_before(paragraph)
         run.underline = False
         self._heading_paragraphs.append(paragraph)
 
@@ -1509,11 +1604,10 @@ class DocxRenderer(RendererPort):
         updates on open (or via Ctrl+A, F9).
         """
 
-        self.doc.add_page_break()
-
         heading_para = self.doc.add_paragraph()
         heading_run = heading_para.add_run((block.title or "СОДЕРЖАНИЕ").upper())
         self._set_paragraph_format(heading_para, "toc_heading")
+        self._set_page_break_before(heading_para)
         heading_run.underline = False
         self._heading_paragraphs.append(heading_para)
         self._separate()
@@ -1569,12 +1663,19 @@ class DocxRenderer(RendererPort):
             return
         docx_styles.apply_word_heading_style(self.doc, paragraph, style_name)
 
-    def _start_text_section_or_page_break(self) -> None:
+    def _start_text_section(self) -> bool:
+        """Prepare a new page for the paragraph the caller is about to add.
+
+        Returns ``True`` when the caller must mark its first paragraph with
+        :meth:`_set_page_break_before`; ``False`` when a section break already
+        started the new page.
+        """
+
         if self._current_section_requires_text_reset():
             self.doc.add_section(WD_SECTION.NEW_PAGE)
             self._configure_default_text_section(self.doc.sections[-1])
-            return
-        self.doc.add_page_break()
+            return False
+        return True
 
     def _current_section_requires_text_reset(self) -> bool:
         section = self.doc.sections[-1]

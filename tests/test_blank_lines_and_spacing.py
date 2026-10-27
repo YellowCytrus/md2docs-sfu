@@ -132,8 +132,8 @@ def test_no_blank_line_before_heading_at_page_start(tmp_path):
 
     texts = [paragraph.text for paragraph in doc.paragraphs]
     heading_index = texts.index("1 Новая глава")
-    assert texts[heading_index - 1] == ""
-    assert _has_page_break(doc.paragraphs[heading_index - 1])
+    assert texts[heading_index - 1] == "Текст до разрыва."
+    assert doc.paragraphs[heading_index].paragraph_format.page_break_before is True
     assert texts[heading_index + 1] == ""
     assert texts[heading_index + 2] == "Текст после заголовка."
 

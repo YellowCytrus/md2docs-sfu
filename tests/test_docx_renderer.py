@@ -420,6 +420,7 @@ def test_docx_renderer_renders_structural_sections_with_special_formatting(tmp_p
     )
     ast = Document(
         blocks=(
+            ParagraphNode(runs=(TextRun("Содержание предыдущего раздела."),)),
             StructuralSectionNode(
                 section_type=StructuralSectionType.INTRODUCTION,
                 title="введение",
@@ -437,7 +438,7 @@ def test_docx_renderer_renders_structural_sections_with_special_formatting(tmp_p
     heading = doc.paragraphs[heading_index]
 
     assert heading_index > 0
-    assert 'w:type="page"' in doc.paragraphs[heading_index - 1]._p.xml
+    assert heading.paragraph_format.page_break_before is True
     assert doc.paragraphs[heading_index + 1].text == ""
     assert "Body" in texts
 
@@ -921,7 +922,7 @@ def test_docx_renderer_renders_appendix_on_new_page_with_centered_heading(tmp_pa
     subtitle_index = texts.index("Исходные данные")
     subtitle = doc.paragraphs[subtitle_index]
 
-    assert 'w:type="page"' in doc.paragraphs[heading_index - 1]._p.xml
+    assert heading.paragraph_format.page_break_before is True
     assert heading.paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER
     assert_close(heading.paragraph_format.first_line_indent, Cm(0))
     assert heading.runs[0].bold is True

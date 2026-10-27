@@ -111,7 +111,7 @@ class DocxTemplateAdapter(TemplatePort):
 
         page_break = self._make_page_break_paragraph(template_doc)
         if page_break is not None:
-            self._append_before_sect_pr(body, page_break, sect_pr)
+            self._append_page_break_before_generated(body, page_break, sect_pr)
 
         for element in self._iter_body_blocks(generated_doc.element.body):
             self._append_before_sect_pr(body, deepcopy(element), sect_pr)
@@ -221,6 +221,31 @@ class DocxTemplateAdapter(TemplatePort):
             sect_pr.addprevious(element)
         else:
             body.append(element)
+
+    def _append_page_break_before_generated(self, body, page_break, sect_pr):
+        """Separate the template from the generated body without a stray line.
+
+        A paragraph that holds nothing but a page break still occupies a line.
+        When the template ends exactly at the bottom of its last page, that
+        line is pushed onto the next page and the break lands after it, which
+        leaves a fully blank page. Attaching the break to the last template
+        paragraph keeps the same pagination with no extra line; if the
+        template already ends with a page break nothing has to be added at all.
+        """
+
+        last = None
+        for element in self._iter_body_blocks(body):
+            last = element
+        if last is None or last.tag != qn("w:p"):
+            self._append_before_sect_pr(body, page_break, sect_pr)
+            return
+        if any(br.get(qn("w:type")) == "page" for br in last.findall(".//" + qn("w:br"))):
+            return
+        run = page_break.find(qn("w:r"))
+        if run is None:
+            self._append_before_sect_pr(body, page_break, sect_pr)
+            return
+        last.append(deepcopy(run))
 
     def _make_page_break_paragraph(self, doc):
         from docx.oxml import OxmlElement
