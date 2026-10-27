@@ -258,7 +258,7 @@ def test_regular_numbered_list_keeps_parenthesis_marker(tmp_path):
     assert _marker_texts_for_paragraph(doc, item)[0] == "%1)"
 
 
-def test_bullet_list_uses_short_hyphen_marker(tmp_path):
+def test_bullet_list_uses_en_dash_marker(tmp_path):
     doc = _render(
         tmp_path,
         (
@@ -271,7 +271,7 @@ def test_bullet_list_uses_short_hyphen_marker(tmp_path):
     )
 
     item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "Первый пункт.")
-    assert _marker_texts_for_paragraph(doc, item) == ["-", "-", "-"]
+    assert _marker_texts_for_paragraph(doc, item) == ["\u2013", "\u2013", "\u2013"]
 
 
 def _paragraph_with_drawing(doc):

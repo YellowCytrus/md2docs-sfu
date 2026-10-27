@@ -22,7 +22,7 @@ _BIB_LEFT_CM = 1.85
 _BIB_HANGING_CM = 0.6
 _TWIPS_PER_CM = 566.929133858
 
-_BULLET_MARKERS = ("-", "-", "-")  # short hyphen at every level
+_BULLET_MARKERS = ("\u2013", "\u2013", "\u2013")  # en dash at every level
 _NUMBER_FORMATS = ("decimal", "lowerLetter", "decimal")
 _NUMBER_TEXTS = ("%1)", "%2)", "%3)")
 _BIBLIOGRAPHY_TEXTS = ("%1.", "%2.", "%3.")
