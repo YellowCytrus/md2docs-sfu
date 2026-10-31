@@ -26,6 +26,7 @@ from sfu_converter.domain.ast_nodes import (
     TextRun,
 )
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
+from sfu_converter.domain.inline_markup import strip_inline_markup
 
 _ABBREVIATION_RE = re.compile(r"(?<![\w])([A-ZА-ЯЁ]{2,})(?![\w])")
 _INTRODUCTION_RE = re.compile(
@@ -118,7 +119,7 @@ def _iter_text_items(blocks: Iterable[object]) -> Iterable[_TextItem]:
                 yield _TextItem(block.caption, block.source, forbids_abbreviations=True)
             for row in block.rows:
                 for cell in row.cells:
-                    yield _TextItem(cell.text, block.source)
+                    yield _TextItem(strip_inline_markup(cell.text), block.source)
         elif isinstance(block, ListNode):
             for item in block.items:
                 if isinstance(item, ListNode):

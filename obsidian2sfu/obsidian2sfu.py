@@ -115,8 +115,18 @@ def _inline(text: str) -> str:
 
 
 def _plain(text: str) -> str:
-    """For table cells / list items (V2 keeps those as plain text)."""
+    """For list items (V2 keeps those as plain text)."""
     return _strip_emphasis(_inline(text).replace("`", ""))
+
+
+def _cell(text: str) -> str:
+    """Normalise a table cell, keeping ``**bold**`` for the DOCX renderer.
+
+    V2 table cells are rendered as runs, so bold markers survive into Word;
+    single-asterisk italics and code spans are still flattened to plain text.
+    """
+    text = _inline(text).replace("`", "")
+    return re.sub(r"(?<!\*)\*([^*]+?)\*(?!\*)", r"\1", text)
 
 
 def _split_row(line: str) -> list[str]:
@@ -218,7 +228,7 @@ class MarkdownConverter:
         out.append("")
         out.append("[TABLE" + (" " + " ".join(attrs) if attrs else "") + "]")
         for r in body:
-            out.append("| " + " | ".join(self.fix(_plain(c)) for c in r) + " |")
+            out.append("| " + " | ".join(self.fix(_cell(c)) for c in r) + " |")
         out.append("[TABLE_END]")
 
     # -- formulas -----------------------------------------------------

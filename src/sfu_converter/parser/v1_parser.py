@@ -25,8 +25,8 @@ from sfu_converter.domain.ast_nodes import (
     StructuralSectionType,
     TableCaptionNode,
     TableCell,
-    TableNote,
     TableNode,
+    TableNote,
     TableOfContentsNode,
     TableRow,
     TextRun,
@@ -34,16 +34,12 @@ from sfu_converter.domain.ast_nodes import (
 )
 from sfu_converter.domain.dashes import normalize_dashes
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
+from sfu_converter.domain.inline_markup import split_inline_markup
 from sfu_converter.parser.attributes import parse_attributes
 from sfu_converter.parser.base import BaseParser, ParserResult
 from sfu_converter.parser.citations import split_citation_runs, starts_with_citation
 
 _IMAGE_RE = re.compile(r"\[IMAGE(?:=([^\]]+))?\]")
-_INLINE_FORMATTING_RE = re.compile(
-    r"\*\*\*(\S(?:.*?\S)?)\*\*\*"
-    r"|\*\*(\S(?:.*?\S)?)\*\*"
-    r"|\*(\S(?:[^*]*?\S)?)\*"
-)
 _BIBLIOGRAPHY_ENTRY_RE = re.compile(r"^(\d+)\s+(.+)$")
 _CYRILLIC_LATIN_MAP = {
     "А": "A",
@@ -1105,22 +1101,4 @@ def _parse_inline_formatting_without_citations(
 ) -> tuple[TextRun, ...]:
     """Split text into TextRuns by ``***bi***``, ``**bold**``, ``*italic*``."""
 
-    runs: list[TextRun] = []
-    cursor = 0
-    for match in _INLINE_FORMATTING_RE.finditer(text):
-        start, end = match.span()
-        if start > cursor:
-            runs.append(TextRun(text=text[cursor:start], source=source))
-        bi, bold, italic = match.group(1), match.group(2), match.group(3)
-        if bi is not None:
-            runs.append(TextRun(text=bi, bold=True, italic=True, source=source))
-        elif bold is not None:
-            runs.append(TextRun(text=bold, bold=True, source=source))
-        else:
-            runs.append(TextRun(text=italic, italic=True, source=source))
-        cursor = end
-    if cursor < len(text):
-        runs.append(TextRun(text=text[cursor:], source=source))
-    if not runs:
-        return (TextRun(text=text, source=source),)
-    return tuple(runs)
+    return split_inline_markup(text, source=source)

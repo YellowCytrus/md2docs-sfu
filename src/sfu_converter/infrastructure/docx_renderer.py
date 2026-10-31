@@ -12,7 +12,7 @@ from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Cm, Pt, RGBColor
+from docx.shared import Cm, Pt, RGBColor, Twips
 from docx.text.paragraph import Paragraph
 
 from sfu_converter.config import PathConfig, SIBFUConfig
@@ -50,6 +50,7 @@ from sfu_converter.domain.ast_nodes import (
     TableNode,
     TableNote,
     TableOfContentsNode,
+    TextRun,
     TitleBlockForm,
     TitlePageNode,
 )
@@ -61,6 +62,7 @@ from sfu_converter.domain.constants import (
 from sfu_converter.domain.dashes import normalize_dashes
 from sfu_converter.domain.diagnostics import Diagnostic, DiagnosticCodes, Severity
 from sfu_converter.domain.formatting import FormattingProfile, unsupported_rule_diagnostics
+from sfu_converter.domain.inline_markup import split_inline_markup, strip_inline_markup
 from sfu_converter.domain.reference_graph import build_reference_graph
 from sfu_converter.infrastructure import docx_styles, frames, main_inscription, section_setup
 from sfu_converter.infrastructure.abbreviations import abbreviations_for_document, explicit_abbreviations
@@ -92,6 +94,7 @@ from sfu_converter.infrastructure.page_numbering import (
     configure as configure_page_numbering,
 )
 from sfu_converter.infrastructure.project_designation import format_designation
+from sfu_converter.infrastructure.table_layout import EMU_PER_TWIP, compute_column_widths
 from sfu_converter.infrastructure.toc import TocEntry, TocField, build_toc_field
 from sfu_converter.parser.citations import format_citation_node
 from sfu_converter.ports.renderer import RendererPort
@@ -807,6 +810,7 @@ class DocxRenderer(RendererPort):
         notes: tuple[TableNote, ...] = (),
         style_name: str = docx_styles.TABLE,
         borderless: bool = False,
+        autofit: bool = True,
     ):
         if not rows_data:
             return
@@ -824,6 +828,15 @@ class DocxRenderer(RendererPort):
         table.style = style_name
         table.autofit = False
         self._set_table_borders(table, borderless=borderless)
+        widths = (
+            compute_column_widths(
+                rows_data,
+                total_width=self._text_width_twips(),
+                font_size_pt=table_cfg["font_size"].pt,
+            )
+            if autofit
+            else []
+        )
 
         for row_idx, row_cells in enumerate(rows_data):
             row = table.rows[row_idx]
@@ -832,26 +845,10 @@ class DocxRenderer(RendererPort):
             for col_idx, text in enumerate(row_cells):
                 if col_idx < len(row.cells):
                     cell = row.cells[col_idx]
-                    cell.text = text
                     self._set_cell_margins(cell, top=120, bottom=120)
                     if not borderless:
                         self._set_cell_borders(cell)
-                    for para in cell.paragraphs:
-                        pf = para.paragraph_format
-                        pf.alignment = WD_ALIGN_PARAGRAPH.CENTER if is_header else WD_ALIGN_PARAGRAPH.LEFT
-                        pf.space_before = table_cfg["cell_padding"]
-                        pf.space_after = table_cfg["cell_padding"]
-                        pf.first_line_indent = NO_INDENT_CM
-                        pf.line_spacing = table_cfg["line_spacing"]
-
-                        for run in para.runs:
-                            self._set_run_style(
-                                run,
-                                bold=is_header and table_cfg["header_bold"],
-                            )
-                            run.font.size = table_cfg["header_font_size"] if is_header else table_cfg["font_size"]
-                            if not is_header and _ITALIC_LETTER_RE.fullmatch(text.strip()):
-                                run.italic = True
+                    self._fill_table_cell(cell, text, is_header=is_header)
 
         if table_cfg["header_repeat_on_pages"]:
             for row in table.rows[:header_row_count]:
@@ -863,7 +860,101 @@ class DocxRenderer(RendererPort):
         for note in notes:
             self._append_table_note_row(table, note)
 
+        # Column widths are applied last so that merged note rows span the full
+        # table width instead of inheriting the first column's grid slot.
+        self._apply_column_widths(table, widths)
+
         self._rendered_body_blocks = True
+
+    def _fill_table_cell(self, cell, text: str, *, is_header: bool) -> None:
+        """Write cell text as runs, keeping ``**bold**``/``*italic*`` markup."""
+
+        table_cfg = self.config.TABLE
+        paragraph = cell.paragraphs[0]
+        paragraph.clear()
+        pf = paragraph.paragraph_format
+        pf.alignment = WD_ALIGN_PARAGRAPH.CENTER if is_header else WD_ALIGN_PARAGRAPH.LEFT
+        pf.space_before = table_cfg["cell_padding"]
+        pf.space_after = table_cfg["cell_padding"]
+        pf.first_line_indent = NO_INDENT_CM
+        pf.line_spacing = table_cfg["line_spacing"]
+
+        font_size = table_cfg["header_font_size"] if is_header else table_cfg["font_size"]
+        header_bold = is_header and table_cfg["header_bold"]
+        # СТУ 7.5-07: a lone Latin/Greek letter in a value column is a variable
+        # and must be italic.
+        italic_letter = not is_header and bool(
+            _ITALIC_LETTER_RE.fullmatch(strip_inline_markup(text).strip())
+        )
+        inline_runs = tuple(run for run in split_inline_markup(text) if run.text) or (
+            TextRun(text=""),
+        )
+        for inline_run in inline_runs:
+            run = paragraph.add_run(inline_run.text)
+            self._set_run_style(
+                run,
+                bold=header_bold or inline_run.bold,
+                italic=inline_run.italic or italic_letter,
+            )
+            run.font.size = font_size
+
+    def _text_width_twips(self) -> int:
+        """Width of the current section's text area in twips."""
+
+        section = self.doc.sections[-1]
+        page_width = section.page_width
+        if page_width is None:
+            return 0
+        left = section.left_margin or 0
+        right = section.right_margin or 0
+        return int((page_width - left - right) / EMU_PER_TWIP)
+
+    def _apply_column_widths(self, table, widths) -> None:
+        """Freeze ``widths`` (twips) into the table's grid and cell properties."""
+
+        if not widths:
+            return
+        total = sum(widths)
+        tbl_pr = table._tbl.tblPr
+        tbl_w = tbl_pr.find(qn("w:tblW"))
+        if tbl_w is None:
+            tbl_w = OxmlElement("w:tblW")
+            tbl_pr.insert_element_before(
+                tbl_w,
+                "w:jc",
+                "w:tblCellSpacing",
+                "w:tblInd",
+                "w:tblBorders",
+                "w:shd",
+                "w:tblLayout",
+                "w:tblCellMar",
+                "w:tblLook",
+            )
+        tbl_w.set(qn("w:type"), "dxa")
+        tbl_w.set(qn("w:w"), str(total))
+
+        layout = tbl_pr.find(qn("w:tblLayout"))
+        if layout is None:
+            layout = OxmlElement("w:tblLayout")
+            tbl_pr.insert_element_before(
+                layout,
+                "w:tblCellMar",
+                "w:tblLook",
+            )
+        layout.set(qn("w:type"), "fixed")
+
+        grid = table._tbl.find(qn("w:tblGrid"))
+        if grid is not None:
+            for index, column in enumerate(grid.findall(qn("w:gridCol"))):
+                if index < len(widths):
+                    column.set(qn("w:w"), str(widths[index]))
+
+        for row in table._tbl.tr_lst:
+            offset = 0
+            for cell in row.tc_lst:
+                span = max(1, cell.grid_span or 1)
+                cell.width = Twips(sum(widths[offset : offset + span]) or widths[-1])
+                offset += span
 
     def _render_table(self, block: TableNode):
         table_number = self._table_number(block)
@@ -890,6 +981,7 @@ class DocxRenderer(RendererPort):
             caption,
             header_row_count=header_row_count,
             notes=block.notes,
+            autofit=block.autofit,
         )
 
     def _table_rows_for_render(self, block: TableNode, *, is_continuation: bool) -> list[list[str]]:

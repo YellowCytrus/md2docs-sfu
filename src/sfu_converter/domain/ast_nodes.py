@@ -239,6 +239,7 @@ class TableNode:
     notes: tuple[TableNote, ...] = ()
     column_units: tuple[str | None, ...] = ()
     header_row_count: int = 1
+    autofit: bool = True
     source: SourceSpan | None = None
 
     def __post_init__(self) -> None:

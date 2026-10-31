@@ -745,6 +745,7 @@ class V2Parser(BaseParser):
                 notes=tuple(notes),
                 column_units=_parse_column_units(attrs.get("column_units")),
                 header_row_count=header_row_count,
+                autofit=_parse_flag(attrs.get("autofit")),
                 source=SourceSpan(
                     line_start=table_start_span.line_start,
                     line_end=i + 1 if found_end else len(lines),
@@ -1429,6 +1430,12 @@ def _parse_column_units(value: str | None) -> tuple[str | None, ...]:
         unit = item.strip()
         units.append(None if unit in {"", "-"} else unit)
     return tuple(units)
+
+
+def _parse_flag(value: str | None, *, default: bool = True) -> bool:
+    if value is None:
+        return default
+    return value.strip().casefold() not in {"false", "no", "off", "0"}
 
 
 def _parse_section_orientation(value: str | None) -> SectionOrientation:

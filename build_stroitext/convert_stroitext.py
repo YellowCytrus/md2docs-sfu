@@ -95,8 +95,13 @@ def esc(text: str) -> str:
 
 
 def strip_emphasis(text: str) -> str:
-    """Table cells and list items are plain text in V2, so drop md markers."""
+    """List items are plain text in V2, so drop md markers."""
     return re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+
+
+def table_cell(text: str) -> str:
+    """Keep ``**bold**`` in table cells: the renderer turns it into a bold run."""
+    return re.sub(r"(?<!\*)\*([^*]+?)\*(?!\*)", r"\1", text)
 
 
 def fix_refs(text: str) -> str:
@@ -123,7 +128,7 @@ def emit_table(rows: list[list[str]], caption: str | None, out: list[str]) -> No
         attrs.append("header=false")
     out.append("[TABLE" + (" " + " ".join(attrs) if attrs else "") + "]")
     for r in body:
-        out.append("| " + " | ".join(fix_refs(strip_emphasis(c)) for c in r) + " |")
+        out.append("| " + " | ".join(fix_refs(table_cell(c)) for c in r) + " |")
     out.append("[TABLE_END]")
 
 

@@ -11,6 +11,7 @@ from sfu_converter.domain.ast_nodes import (
     ParagraphNode,
     TableNode,
 )
+from sfu_converter.domain.inline_markup import strip_inline_markup
 
 _SHORT_IN_PARENS_RE = re.compile(
     r"(?P<long>[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9-]*(?:\s+[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9-]*){1,5})"
@@ -104,7 +105,7 @@ def _iter_text(blocks: Iterable[object]) -> Iterable[str]:
         elif isinstance(block, TableNode):
             for row in block.rows:
                 for cell in row.cells:
-                    yield cell.text
+                    yield strip_inline_markup(cell.text)
         elif isinstance(block, AppendixNode):
             yield from _iter_text(block.blocks)
 
