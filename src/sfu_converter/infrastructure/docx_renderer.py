@@ -801,6 +801,10 @@ class DocxRenderer(RendererPort):
         if tr_pr.find(qn("w:cantSplit")) is None:
             tr_pr.append(OxmlElement("w:cantSplit"))
 
+    #: Size table columns by their content. ``--autofit false`` on the CLI
+    #: flips it to equal columns for the whole document.
+    table_autofit = True
+
     def _create_table(
         self,
         rows_data,
@@ -981,7 +985,7 @@ class DocxRenderer(RendererPort):
             caption,
             header_row_count=header_row_count,
             notes=block.notes,
-            autofit=block.autofit,
+            autofit=block.autofit and self.table_autofit,
         )
 
     def _table_rows_for_render(self, block: TableNode, *, is_continuation: bool) -> list[list[str]]:

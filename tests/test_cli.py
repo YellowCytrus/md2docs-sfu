@@ -667,3 +667,79 @@ def test_agents_defaults_to_install_action(monkeypatch):
 
     assert exit_code == cli.ExitCodes.SUCCESS
     assert captured["action"] == "install"
+
+
+def test_convert_autofit_flag_defaults_to_true(tmp_path):
+    parser = cli.create_parser()
+
+    args = parser.parse_args(
+        [
+            "--workdir",
+            str(tmp_path),
+            "convert",
+            "--input",
+            "input.txt",
+            "--output",
+            "output.docx",
+        ]
+    )
+
+    assert args.autofit == "true"
+
+
+def test_convert_autofit_flag_accepts_false(tmp_path):
+    parser = cli.create_parser()
+
+    for extra, expected in ((["--autofit", "false"], "false"), (["--autofit"], "true")):
+        args = parser.parse_args(
+            [
+                "--workdir",
+                str(tmp_path),
+                "convert",
+                "--input",
+                "input.txt",
+                "--output",
+                "output.docx",
+                *extra,
+            ]
+        )
+        assert args.autofit == expected
+
+
+def test_convert_command_passes_autofit_to_converter(tmp_path, capsys, monkeypatch):
+    (tmp_path / "report.txt").write_text("Body text", encoding="utf-8")
+    seen = []
+
+    def fake_convert_file(self, input_path, output_path, **kwargs):
+        seen.append(kwargs.get("table_autofit"))
+        self.diagnostics = []
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"fake")
+        return str(output_path)
+
+    monkeypatch.setattr(
+        "sfu_converter.converter.TextToDocxConverter.convert_file",
+        fake_convert_file,
+    )
+
+    def run(*extra: str) -> int:
+        return cli.main(
+            [
+                "--format",
+                "json",
+                "--workdir",
+                str(tmp_path),
+                "convert",
+                "--input",
+                "report.txt",
+                "--output",
+                "report.docx",
+                *extra,
+            ]
+        )
+
+    assert run() == cli.ExitCodes.SUCCESS
+    assert run("--autofit", "false") == cli.ExitCodes.SUCCESS
+    capsys.readouterr()
+
+    assert seen == [True, False]

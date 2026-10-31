@@ -291,3 +291,26 @@ def test_autofit_false_keeps_equal_columns(tmp_path):
     widths = _grid_widths(doc.tables[0])
     assert len(set(widths)) == 1
     assert doc.tables[0]._tbl.tblPr.find(qn("w:tblW")).get(qn("w:type")) == "auto"
+
+
+def test_renderer_can_disable_autofit_globally(tmp_path):
+    document = _parse_v2(
+        "\n".join(
+            [
+                '[TABLE caption="Параметры"]',
+                "| № | Наименование параметра | Значение |",
+                "| 1 | Давление в камере сгорания на номинальном режиме | 10 |",
+                "[TABLE_END]",
+            ]
+        )
+    )
+    output = tmp_path / "table_no_autofit.docx"
+
+    renderer = DocxRenderer(base_dir=tmp_path)
+    renderer.table_autofit = False
+    renderer.render_to_file(document, get_profile("common"), str(output))
+
+    table = DocxDocument(str(output)).tables[0]
+    widths = _grid_widths(table)
+    assert len(set(widths)) == 1
+    assert table._tbl.tblPr.find(qn("w:tblW")).get(qn("w:type")) == "auto"

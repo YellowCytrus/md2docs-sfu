@@ -103,6 +103,7 @@ class TextToDocxConverter:
         syntax_version: int = DEFAULT_SYNTAX_VERSION,
         strict: bool = False,
         skip_generated_front_matter: bool = False,
+        table_autofit: bool = True,
         *,
         profile: FormattingProfile,
     ):
@@ -111,6 +112,7 @@ class TextToDocxConverter:
         output_file = Path(output_file)
 
         self.logger.info(f"Начало конвертации: {input_file}")
+        self._renderer.table_autofit = table_autofit
         source = input_file.read_text(encoding="utf-8")
         use_case = ConvertTextToDocx(
             get_parser(syntax_version, strict=strict),

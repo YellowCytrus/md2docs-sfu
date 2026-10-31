@@ -54,6 +54,12 @@ Use the default template unless the user supplies their own path. Keep `[TITLE_P
 `[META]` block in the `.txt` — required `[META]` still gates conversion, and `[TITLE_PAGE]` is the
 re-enable point once built-in generation is ready (it's a no-op under `--skip-generated-front-matter`).
 
+### Table column widths
+
+Table columns are sized by their content: a column with long text grows, a column with numbers
+shrinks. Pass `--autofit false` to give every column an equal share instead; a single table can opt
+out in the TXT itself with `[TABLE autofit=false]`.
+
 ### Caveat: `--strict` and `--validate-output` are advisory, not gates
 
 - `--strict` promotes **every** warning to an error — including `FORMAT_RULE_NOT_SUPPORTED`

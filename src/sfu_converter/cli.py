@@ -66,6 +66,17 @@ def create_parser() -> argparse.ArgumentParser:
     _add_common_options(convert_p, include_defaults=False)
     convert_p.add_argument("--input", required=True, type=Path)
     convert_p.add_argument("--output", required=True, type=Path)
+    convert_p.add_argument(
+        "--autofit",
+        nargs="?",
+        const="true",
+        choices=["true", "false"],
+        default="true",
+        help=(
+            "Size table columns by their content (default: true). "
+            "Pass --autofit false to give every column an equal share of the width"
+        ),
+    )
     convert_p.add_argument("--profile", default=DEFAULT_PROFILE_NAME)
     convert_p.add_argument("--template", type=Path, default=None)
     convert_p.add_argument(
@@ -236,6 +247,7 @@ def cmd_convert(args) -> int:
             syntax_version=args.syntax_version,
             strict=args.strict,
             skip_generated_front_matter=args.skip_generated_front_matter,
+            table_autofit=args.autofit != "false",
             profile=profile,
         )
     except OSError as exc:
