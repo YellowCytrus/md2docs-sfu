@@ -44,6 +44,14 @@ def test_split_inline_math_without_math_returns_single_text_segment():
     assert split_inline_math("просто текст") == [("text", "просто текст")]
 
 
+def test_split_inline_math_supports_double_dollar_delimiters():
+    assert split_inline_math("итого $$a + b$$ верно") == [
+        ("text", "итого "),
+        ("math", "a + b"),
+        ("text", " верно"),
+    ]
+
+
 def test_has_inline_math_detects_regions():
     assert has_inline_math("$x$")
     assert not has_inline_math("100 $ на счёт")
@@ -95,6 +103,21 @@ def test_renderer_renders_inline_math_as_equation(tmp_path):
     combined = "".join(p.text for p in doc.paragraphs)
     assert "значение" in combined and "растёт" in combined
     assert "$" not in combined
+
+
+@requires_pandoc
+def test_renderer_renders_double_dollar_math_without_leaking_delimiters(tmp_path):
+    renderer = DocxRenderer(base_dir=tmp_path)
+    ast = Document(
+        blocks=(ParagraphNode(runs=(TextRun(text="итого $$a + b$$ верно"),)),)
+    )
+    output_path = tmp_path / "double_dollar_math.docx"
+
+    renderer.render_to_file(ast, get_profile("common"), str(output_path))
+
+    doc = DocxDocument(str(output_path))
+    assert "<m:oMath" in doc.element.body.xml
+    assert "$" not in doc.element.body.xml
 
 
 @requires_pandoc
@@ -150,6 +173,18 @@ def test_markdown_display_math_becomes_latex_formula_blocks():
     assert txt.count("[FORMULA_END]") == 4
     assert "E = mc^2" in txt
     assert "FV = PV" in txt
+
+
+def test_markdown_display_math_after_paragraph_becomes_formula_block():
+    module = _load_obsidian2sfu()
+    converter = _markdown_converter(module)
+    text = "Сумма степеней:\n$$B = A + A^2$$\n\nпродолжение\n"
+
+    txt = converter.convert(text, Path("/tmp"))
+
+    assert "[FORMULA format=latex number=auto]\nB = A + A^2\n[FORMULA_END]" in txt
+    assert "[P] Сумма степеней:" in txt
+    assert "$$" not in txt
 
 
 def test_markdown_inline_math_is_left_intact():

@@ -64,6 +64,7 @@ STRUCTURAL_TITLES = {
     "список литературы": "СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ",
     "библиография": "СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ",
 }
+SOURCES_TITLE = "СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ"
 APPENDIX_LETTERS = "АБВГДЕЖИКЛМНПРСТУФХЦЧШЩЭЮЯ"
 
 # Reference title page values (from title_reference.docx) and the metadata key
@@ -142,6 +143,38 @@ def _is_separator(cells: list[str]) -> bool:
     return bool(cells) and all(
         re.fullmatch(r":?-{2,}:?", c.strip()) for c in cells if c.strip() != ""
     ) and any(c.strip() for c in cells)
+
+
+def _heading_parts(raw: str) -> tuple[int, str] | None:
+    """Split an ATX heading into (level, title) or return None."""
+    m = re.match(r"^(#{1,6})\s+(.*?)\s*$", raw.strip())
+    if not m:
+        return None
+    return len(m.group(1)), m.group(2).strip().rstrip("#").strip()
+
+
+def _is_sources_heading(title: str) -> bool:
+    key = " ".join(title.split()).casefold()
+    return STRUCTURAL_TITLES.get(key) == SOURCES_TITLE
+
+
+def _note_has_sources(lines: list[str], start: int) -> bool:
+    """True when the note brings its own bibliography section."""
+    for raw in lines[start:]:
+        heading = _heading_parts(raw)
+        if heading and _is_sources_heading(heading[1]):
+            return True
+    return False
+
+
+def _section_has_content(lines: list[str], start: int) -> bool:
+    """True when the section starting at ``start`` has at least one non-empty line."""
+    for raw in lines[start:]:
+        if _heading_parts(raw):
+            return False
+        if raw.strip() and not re.fullmatch(r"[-*_]{3,}", raw.strip()):
+            return True
+    return False
 
 
 def _parse_frontmatter(lines: list[str]) -> tuple[dict, int]:
@@ -305,6 +338,11 @@ class MarkdownConverter:
 
         in_appendix = False
         sources_done = False
+        # The note may bring its own bibliography; then config `sources` are ignored
+        # so the list is not printed twice.
+        note_has_sources = _note_has_sources(lines, start)
+        in_sources_section = False
+        note_sources = 0
         appendix_index = 0
         i = start
         n = len(lines)
@@ -366,9 +404,10 @@ class MarkdownConverter:
                 level = len(m.group(1))
                 title = m.group(2).strip().rstrip("#").strip()
                 key = " ".join(title.split()).casefold()
+                in_sources_section = _is_sources_heading(title)
                 appendix = re.match(r"(?i)^приложение\s+\d+[.\s]*(.*)$", title)
                 if appendix:
-                    if not sources_done:
+                    if not sources_done and not note_has_sources:
                         self.emit_sources(out)
                         sources_done = True
                     letter = APPENDIX_LETTERS[min(appendix_index, len(APPENDIX_LETTERS) - 1)]
@@ -383,6 +422,16 @@ class MarkdownConverter:
                 if key in STRUCTURAL_TITLES:
                     out.append("")
                     out.append(f'[STRUCTURAL title="{STRUCTURAL_TITLES[key]}"]')
+                    if (
+                        STRUCTURAL_TITLES[key] == SOURCES_TITLE
+                        and self.sources
+                        and not _section_has_content(lines, i + 1)
+                    ):
+                        # empty bibliography section in the note -> fill it from config
+                        for number, entry in enumerate(self.sources, start=1):
+                            out.append(f"[SOURCE number={number}] {self.fix(entry)}")
+                        sources_done = True
+                        in_sources_section = False
                     i += 1
                     continue
                 if title in self.promote_h1:
@@ -393,6 +442,15 @@ class MarkdownConverter:
                     out.append(f'[H level={level} title="{_esc(title)}"]')
                 else:
                     out.append(f'[H level={level} title="{_esc(title)}" number=auto]')
+                i += 1
+                continue
+
+            # inside the note's own bibliography -> one [SOURCE] per line
+            if in_sources_section and not stripped.startswith(("|", "```", "![", ">", "$$")):
+                entry = re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", stripped).strip()
+                if entry:
+                    note_sources += 1
+                    out.append(f"[SOURCE number={note_sources}] {self.fix(entry)}")
                 i += 1
                 continue
 
@@ -445,6 +503,7 @@ class MarkdownConverter:
                     or re.match(r"^[-*+]\s+", nxt)
                     or re.match(r"^\d+[.)]\s+", nxt)
                     or re.match(r"^!\[", nxt)
+                    or nxt.startswith("$$")
                     or re.fullmatch(r"[-*_]{3,}", nxt)
                 ):
                     break
@@ -453,8 +512,8 @@ class MarkdownConverter:
             out.append("")
             out.append("[P] " + _inline(self.fix(" ".join(parts))))
 
-        # sources without appendices -> emit at the end
-        if self.sources and not sources_done:
+        # sources without appendices -> emit at the end (unless the note has its own)
+        if self.sources and not sources_done and not note_has_sources:
             self.emit_sources(out)
 
         return "\n".join(out).rstrip() + "\n"
@@ -660,15 +719,239 @@ def wrap_toc_in_field(doc: Document) -> None:
     entries = toc_entries(doc)
     if not entries:
         return
+    levels = max((_toc_entry_level(entry) for entry in entries), default=3)
     anchor = entries[0]._p.find(qn("w:pPr"))
     for element in (
         _field_run("begin"),
-        _instruction_run(' TOC \\o "1-3" \\h \\z \\u '),
+        _instruction_run(f' TOC \\o "1-{levels}" \\h \\z \\u '),
         _field_run("separate"),
     ):
         anchor.addnext(element)
         anchor = element
     entries[-1]._p.append(_field_run("end"))
+
+
+def _toc_entry_level(entry) -> int:
+    name = entry.style.name.casefold()
+    if not name.startswith("toc "):
+        return 1
+    try:
+        return int(name.rsplit(" ", 1)[1])
+    except (IndexError, ValueError):
+        return 1
+
+
+def set_toc_entry_page(para, page: int) -> None:
+    """Rewrite a ToC entry as one run so LibreOffice run splitting can't duplicate it."""
+
+    heading = para.text.rsplit("\t", 1)[0].strip()
+    for run in list(para.runs):
+        run._element.getparent().remove(run._element)
+    para.add_run(f"{heading}\t{page}")
+
+
+# Runs inside an interpreter that has pyuno: refreshes every index and stores
+# the document back, so the saved ToC matches the final pagination.
+_UNO_TOC_SCRIPT = r"""
+import os
+import sys
+import time
+
+_program = os.path.dirname(os.path.abspath(sys.executable))
+if _program not in sys.path:
+    sys.path.insert(0, _program)
+if os.name == "nt" and hasattr(os, "add_dll_directory") and os.path.isdir(_program):
+    os.add_dll_directory(_program)
+
+import uno
+from com.sun.star.beans import PropertyValue
+
+
+def _prop(name, value):
+    item = PropertyValue()
+    item.Name = name
+    item.Value = value
+    return item
+
+
+def main():
+    port = int(sys.argv[1])
+    docx = sys.argv[2]
+    tmp = docx + ".toc.docx"
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+
+    local_context = uno.getComponentContext()
+    resolver = local_context.ServiceManager.createInstanceWithContext(
+        "com.sun.star.bridge.UnoUrlResolver", local_context
+    )
+    url = "uno:socket,host=127.0.0.1,port=%d;urp;StarOffice.ComponentContext" % port
+    context = None
+    for _ in range(120):
+        try:
+            context = resolver.resolve(url)
+            break
+        except Exception:
+            time.sleep(0.5)
+    if context is None:
+        return 1
+
+    desktop = context.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", context
+    )
+    document = desktop.loadComponentFromURL(
+        uno.systemPathToFileUrl(docx), "_blank", 0, (_prop("Hidden", True),)
+    )
+    if document is None:
+        return 1
+    try:
+        indexes = document.getDocumentIndexes()
+        for index in range(indexes.getCount()):
+            try:
+                indexes.getByIndex(index).update()
+            except Exception:
+                pass
+        document.refresh()
+        document.storeToURL(
+            uno.systemPathToFileUrl(tmp),
+            (_prop("FilterName", "MS Word 2007 XML"), _prop("Overwrite", True)),
+        )
+    finally:
+        document.close(False)
+    os.replace(tmp, docx)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
+
+def _refresh_toc_via_subprocess(python: str, docx_path: Path, port: int) -> bool:
+    try:
+        completed = subprocess.run(
+            [python, "-c", _UNO_TOC_SCRIPT, str(port), str(docx_path.resolve())],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
+
+
+def _refresh_toc_in_process(uno, docx_path: Path, port: int) -> bool:
+    from com.sun.star.beans import PropertyValue  # noqa: PLC0415
+
+    def prop(name, value):
+        item = PropertyValue()
+        item.Name = name
+        item.Value = value
+        return item
+
+    document = None
+    temp_path = docx_path.with_suffix(".toc.docx")
+    temp_path.unlink(missing_ok=True)
+    stored = False
+    try:
+        local_context = uno.getComponentContext()
+        resolver = local_context.ServiceManager.createInstanceWithContext(
+            "com.sun.star.bridge.UnoUrlResolver", local_context
+        )
+        url = f"uno:socket,host=127.0.0.1,port={port};urp;StarOffice.ComponentContext"
+        context = None
+        for _ in range(120):
+            try:
+                context = resolver.resolve(url)
+                break
+            except Exception:  # noqa: BLE001 - the socket may not be up yet
+                time.sleep(0.5)
+        if context is None:
+            return False
+
+        desktop = context.ServiceManager.createInstanceWithContext(
+            "com.sun.star.frame.Desktop", context
+        )
+        document = desktop.loadComponentFromURL(
+            uno.systemPathToFileUrl(str(docx_path.resolve())),
+            "_blank",
+            0,
+            (prop("Hidden", True),),
+        )
+        if document is None:
+            return False
+
+        indexes = document.getDocumentIndexes()
+        for index in range(indexes.getCount()):
+            try:
+                indexes.getByIndex(index).update()
+            except Exception:  # noqa: BLE001 - update is best-effort
+                pass
+        document.refresh()
+        document.storeToURL(
+            uno.systemPathToFileUrl(str(temp_path.resolve())),
+            (prop("FilterName", "MS Word 2007 XML"), prop("Overwrite", True)),
+        )
+        stored = True
+        return True
+    except Exception:  # noqa: BLE001 - ToC refresh is best-effort
+        return False
+    finally:
+        if document is not None:
+            try:
+                document.close(False)
+            except Exception:  # noqa: BLE001
+                pass
+        if stored and temp_path.exists():
+            try:
+                temp_path.replace(docx_path)
+            except OSError:
+                pass
+
+
+def refresh_toc(docx_path: Path) -> bool:
+    """Recompute the ToC with LibreOffice after every layout change."""
+
+    soffice = _find_libreoffice()
+    if soffice is None:
+        return False
+
+    uno = _uno_module()
+    python = None if uno is not None else _uno_python(soffice)
+    if uno is None and python is None:
+        return False
+
+    port = 2200
+    profile = Path(tempfile.mkdtemp(prefix="sfu-toc-"))
+    process = subprocess.Popen(
+        [
+            soffice,
+            f"-env:UserInstallation={profile.as_uri()}",
+            "--headless",
+            "--norestore",
+            "--nodefault",
+            "--invisible",
+            f"--accept=socket,host=127.0.0.1,port={port};urp;",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        if uno is not None:
+            return _refresh_toc_in_process(uno, docx_path, port)
+        assert python is not None  # guarded above
+        return _refresh_toc_via_subprocess(python, docx_path, port)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        shutil.rmtree(profile, ignore_errors=True)
 
 
 def renumber_appendix_captions(doc: Document) -> None:
@@ -1298,13 +1581,7 @@ def _norm(value: str) -> str:
 
 
 def assign_pages(entries, pages: list[str]) -> dict[str, int]:
-    body_start = None
-    for i, page in enumerate(pages, start=1):
-        if "ВВЕДЕНИЕ" in page:
-            body_start = i
-            break
-    if body_start is None:
-        body_start = 1
+    body_start = _body_start_page(pages)
     normalized = [_norm(p) for p in pages]
     result: dict[str, int] = {}
     cursor = body_start
@@ -1323,6 +1600,34 @@ def assign_pages(entries, pages: list[str]) -> dict[str, int]:
     return result
 
 
+_TOC_DOT_LINE_RE = re.compile(r"\.{3,}\s*\d+\s*$", re.MULTILINE)
+
+
+def _is_toc_page(page: str) -> bool:
+    if "СОДЕРЖАНИЕ" in page.upper():
+        return True
+    return len(_TOC_DOT_LINE_RE.findall(page)) >= 3
+
+
+def _body_start_page(pages: list[str]) -> int:
+    """First page of the body, skipping the title page and every ToC page.
+
+    Without this the ToC finds each heading in its own ToC line and writes that
+    page (usually 2) for every entry.
+    """
+
+    for index, page in enumerate(pages):
+        if "СОДЕРЖАНИЕ" in page.upper():
+            index += 1
+            while index < len(pages) and _is_toc_page(pages[index]):
+                index += 1
+            return min(index + 1, len(pages)) or 1
+    for index, page in enumerate(pages, start=1):
+        if "ВВЕДЕНИЕ" in page.upper():
+            return index
+    return 1
+
+
 # ======================================================================
 #  Driver
 # ======================================================================
@@ -1338,6 +1643,8 @@ def load_config(md: Path, overrides: dict, extra_config: str | None = None) -> d
         "promote_to_h1": [],
         "profile": "lab_practical_project_reports",
         "language": "ru",
+        # Numbered list marker: "dot" -> 1., "paren" -> 1)
+        "numbered_list_marker": "dot",
     }
     config_paths = [DEFAULT_CONFIG, md.with_suffix(".sfu.json")]
     if extra_config:
@@ -1375,7 +1682,14 @@ def load_config(md: Path, overrides: dict, extra_config: str | None = None) -> d
 CONVERTER_VALIDATION_ERROR = 2
 
 
-def run_converter(converter, txt: Path, docx: Path, profile: str, workdir: Path) -> None:
+def run_converter(
+    converter,
+    txt: Path,
+    docx: Path,
+    profile: str,
+    workdir: Path,
+    numbered_list_marker: str = "dot",
+) -> None:
     base = [converter] if converter else [sys.executable, "-m", "sfu_converter.cli"]
     cmd = base + [
         "convert",
@@ -1384,6 +1698,7 @@ def run_converter(converter, txt: Path, docx: Path, profile: str, workdir: Path)
         "--profile", profile,
         "--syntax-version", "2",
         "--workdir", str(workdir),
+        "--numbered-list-marker", numbered_list_marker,
     ]
     # Drop a stale result so the exit-code handling below never accepts old output.
     docx.unlink(missing_ok=True)
@@ -1463,7 +1778,14 @@ def main() -> None:
         print("[2/4] no images")
 
     # 3. txt -> docx
-    run_converter(args.converter, txt_path, raw_docx, cfg["profile"], workdir)
+    run_converter(
+        args.converter,
+        txt_path,
+        raw_docx,
+        cfg["profile"],
+        workdir,
+        cfg.get("numbered_list_marker", "dot"),
+    )
     print(f"[3/4] DOCX built: {raw_docx}")
 
     # 4. finalize: title page, ToC field, appendix tables
@@ -1488,9 +1810,7 @@ def main() -> None:
         entries = toc_entries(doc)
         mapping = assign_pages(entries, pages)
         for para in entries:
-            heading = para.text.rsplit("\t", 1)[0].strip()
-            if para.runs:
-                para.runs[-1].text = f"{heading}\t{mapping.get(para.text, 1)}"
+            set_toc_entry_page(para, mapping.get(para.text, 1))
         wrap_toc_in_field(doc)
         doc.save(str(out_docx))
         with_toc = True
@@ -1501,6 +1821,13 @@ def main() -> None:
         wrap_toc_in_field(doc)
         doc.save(str(out_docx))
         print(f"[4/4] DOCX finalized (ToC without page numbers): {out_docx}")
+
+    # Layout is final now, so let LibreOffice recompute the ToC one last time.
+    # This also makes the saved field result match the real pagination.
+    if refresh_toc(out_docx):
+        print("[4/4] ToC refreshed")
+    elif with_toc:
+        print("[!] Не удалось обновить оглавление через LibreOffice — оставлены рассчитанные номера страниц")
 
     for leftover in (raw_docx, stage, stage.with_suffix(".pdf")):
         leftover.unlink(missing_ok=True)

@@ -174,6 +174,45 @@ def test_convert_command_passes_selected_profile_to_converter(tmp_path, capsys, 
     assert payload["profile"] == "research_reports"
 
 
+def test_convert_command_numbered_list_marker_option(tmp_path, capsys, monkeypatch):
+    (tmp_path / "report.txt").write_text("Body text", encoding="utf-8")
+    markers = []
+
+    def fake_convert_file(self, input_path, output_path, **kwargs):
+        markers.append(self._renderer.numbered_list_marker)
+        self.diagnostics = []
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"fake")
+        return str(output_path)
+
+    monkeypatch.setattr(
+        "sfu_converter.converter.TextToDocxConverter.convert_file",
+        fake_convert_file,
+    )
+
+    def run(*extra: str) -> int:
+        return cli.main(
+            [
+                "--format",
+                "json",
+                "--workdir",
+                str(tmp_path),
+                "convert",
+                "--input",
+                "report.txt",
+                "--output",
+                "report.docx",
+                *extra,
+            ]
+        )
+
+    assert run() == cli.ExitCodes.SUCCESS
+    assert run("--numbered-list-marker", "paren") == cli.ExitCodes.SUCCESS
+    capsys.readouterr()
+
+    assert markers == ["dot", "paren"]
+
+
 def test_convert_command_uses_v2_parser_by_default(tmp_path, capsys):
     input_file = tmp_path / "report-v2.txt"
     input_file.write_text(

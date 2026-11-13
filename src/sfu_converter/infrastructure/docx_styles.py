@@ -99,7 +99,11 @@ def register_styles(document) -> None:
     _register(document, LIST_ITEM, base="Normal",
               alignment=WD_ALIGN_PARAGRAPH.JUSTIFY, first_line_indent=FIRST_LINE_INDENT_CM)
     _register(document, TOC_HEADING, base=STRUCTURAL_HEADING, bold=True, all_caps=True,
-              alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM)
+              alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM,
+              outline_level=9)
+    # A template may already ship this style without the body-text outline level;
+    # otherwise Word/LibreOffice list "СОДЕРЖАНИЕ" itself as a ToC entry.
+    _set_outline_level(document.styles[TOC_HEADING], 9)
     _register(document, APPENDIX_HEADING, base="Normal", bold=True,
               alignment=WD_ALIGN_PARAGRAPH.CENTER, first_line_indent=NO_INDENT_CM,
               outline_level=0)

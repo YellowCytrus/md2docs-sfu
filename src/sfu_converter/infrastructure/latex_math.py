@@ -33,7 +33,11 @@ _TOKEN_PREFIX = "SFUMATHTOKEN"
 _TOKEN_SUFFIX = "ENDTOKEN"
 
 # ``$...$`` and ``\(...\)`` are the inline-math delimiters recognised in V2 TXT.
-_INLINE_MATH_RE = re.compile(r"\$([^$\n]+)\$|\\\((.+?)\\\)", re.DOTALL)
+# ``$$...$$`` is display math in Markdown; accept it too so the delimiters are
+# consumed instead of leaking into the rendered paragraph as literal dollars.
+_INLINE_MATH_RE = re.compile(
+    r"\$\$(.+?)\$\$|\$([^$\n]+)\$|\\\((.+?)\\\)", re.DOTALL
+)
 
 
 def split_inline_math(text: str) -> list[tuple[str, str]]:
@@ -48,7 +52,7 @@ def split_inline_math(text: str) -> list[tuple[str, str]]:
     for match in _INLINE_MATH_RE.finditer(text):
         if match.start() > cursor:
             segments.append(("text", text[cursor : match.start()]))
-        value = match.group(1) if match.group(1) is not None else match.group(2)
+        value = next(group for group in match.groups() if group is not None)
         segments.append(("math", value))
         cursor = match.end()
     if cursor < len(text):

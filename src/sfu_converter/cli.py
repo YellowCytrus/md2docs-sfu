@@ -96,6 +96,12 @@ def create_parser() -> argparse.ArgumentParser:
     convert_p.add_argument("--validate-output", action="store_true")
     convert_p.add_argument("--diagnostics", type=Path, default=None)
     convert_p.add_argument("--output-format", choices=["docx", "pptx"], default="docx")
+    convert_p.add_argument(
+        "--numbered-list-marker",
+        choices=["dot", "paren"],
+        default="dot",
+        help="Marker after a numbered list counter: 'dot' gives 1., 'paren' gives 1)",
+    )
 
     validate_p = subparsers.add_parser("validate-docx", help="Validate existing DOCX")
     _add_common_options(validate_p, include_defaults=False)
@@ -236,7 +242,11 @@ def cmd_convert(args) -> int:
         return ExitCodes.MISSING_RESOURCE
 
     try:
-        converter = TextToDocxConverter(SIBFUConfig, str(args.workdir))
+        converter = TextToDocxConverter(
+            SIBFUConfig,
+            str(args.workdir),
+            numbered_list_marker=args.numbered_list_marker,
+        )
         converter.convert_file(
             input_path,
             output_path,

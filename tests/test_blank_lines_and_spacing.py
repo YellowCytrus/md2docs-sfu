@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from docx import Document as DocxDocument
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 from docx.text.paragraph import Paragraph
+from lxml import etree
 from PIL import Image
 
 from sfu_converter.domain.ast_nodes import (
@@ -98,8 +100,8 @@ def test_no_blank_line_between_paragraphs_and_lists(tmp_path):
     texts = [paragraph.text for paragraph in doc.paragraphs]
     assert texts == [
         "До списка.",
-        "Пункт один.",
-        "Пункт два.",
+        "пункт один;",
+        "пункт два.",
         "После списка.",
     ]
 
@@ -117,7 +119,7 @@ def test_blank_line_after_heading_before_list(tmp_path):
     )
 
     texts = [paragraph.text for paragraph in doc.paragraphs]
-    assert texts == ["1 Глава", "", "Пункт один.", "Пункт два."]
+    assert texts == ["1 Глава", "", "пункт один;", "пункт два."]
 
 
 def test_no_blank_line_before_heading_at_page_start(tmp_path):
@@ -206,7 +208,7 @@ def test_sources_heading_and_entries_are_separated_only_after_heading(tmp_path):
     assert texts[heading_index + 3] == "Второй источник."
 
 
-def _marker_texts_for_paragraph(doc, paragraph):
+def _abstract_numbering_for_paragraph(doc, paragraph):
     num_pr = paragraph._p.pPr.numPr
     num_id = num_pr.numId.val
     numbering = doc.part.numbering_part.element
@@ -218,11 +220,16 @@ def _marker_texts_for_paragraph(doc, paragraph):
     assert abstract_id is not None
     for abstract in numbering.findall(qn("w:abstractNum")):
         if abstract.get(qn("w:abstractNumId")) == abstract_id:
-            return [element.get(qn("w:val")) for element in abstract.iter(qn("w:lvlText"))]
+            return abstract
     raise AssertionError("abstract numbering definition not found")
 
 
-def test_numbered_list_in_sources_section_uses_dot_markers(tmp_path):
+def _marker_texts_for_paragraph(doc, paragraph):
+    abstract = _abstract_numbering_for_paragraph(doc, paragraph)
+    return [element.get(qn("w:val")) for element in abstract.iter(qn("w:lvlText"))]
+
+
+def test_numbered_list_in_sources_section_uses_regular_list_markers(tmp_path):
     doc = _render(
         tmp_path,
         (
@@ -238,11 +245,62 @@ def test_numbered_list_in_sources_section_uses_dot_markers(tmp_path):
         name="sources_list.docx",
     )
 
-    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "Первый источник.")
-    assert _marker_texts_for_paragraph(doc, item)[0] == "%1."
+    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "первый источник;")
+    assert _marker_texts_for_paragraph(doc, item) == ["%1.", "%2)", "%3)"]
 
 
-def test_regular_numbered_list_keeps_parenthesis_marker(tmp_path):
+def test_bibliography_entries_are_formatted_like_regular_list_items(tmp_path):
+    doc = _render(
+        tmp_path,
+        (
+            ListNode(
+                list_type=ListType.NUMBERED,
+                items=(ListItemNode("Первый пункт."), ListItemNode("Второй пункт.")),
+            ),
+            StructuralSectionNode(
+                section_type=StructuralSectionType.SOURCES,
+                title="СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ",
+            ),
+            BibliographyEntryNode(number=1, text="Первый источник."),
+        ),
+        name="bibliography_like_list.docx",
+    )
+
+    list_item = next(p for p in doc.paragraphs if p.text == "первый пункт;")
+    entry = next(p for p in doc.paragraphs if p.text == "Первый источник.")
+
+    list_levels = _abstract_numbering_for_paragraph(doc, list_item).findall(qn("w:lvl"))
+    entry_levels = _abstract_numbering_for_paragraph(doc, entry).findall(qn("w:lvl"))
+    assert [etree.tostring(lvl) for lvl in list_levels] == [
+        etree.tostring(lvl) for lvl in entry_levels
+    ]
+
+
+def test_bibliography_entries_use_a_separate_counter(tmp_path):
+    doc = _render(
+        tmp_path,
+        (
+            ListNode(
+                list_type=ListType.NUMBERED,
+                items=(ListItemNode("Первый пункт."), ListItemNode("Второй пункт.")),
+            ),
+            StructuralSectionNode(
+                section_type=StructuralSectionType.SOURCES,
+                title="СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ",
+            ),
+            BibliographyEntryNode(number=1, text="Первый источник."),
+        ),
+        name="bibliography_counter.docx",
+    )
+
+    list_item = next(p for p in doc.paragraphs if p.text == "первый пункт;")
+    entry = next(p for p in doc.paragraphs if p.text == "Первый источник.")
+    assert (
+        list_item._p.pPr.numPr.numId.val != entry._p.pPr.numPr.numId.val
+    ), "bibliography must not continue the body list numbering"
+
+
+def test_regular_numbered_list_uses_dot_marker(tmp_path):
     doc = _render(
         tmp_path,
         (
@@ -254,8 +312,33 @@ def test_regular_numbered_list_keeps_parenthesis_marker(tmp_path):
         name="regular_list.docx",
     )
 
-    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "Первый пункт.")
+    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "первый пункт;")
+    assert _marker_texts_for_paragraph(doc, item)[0] == "%1."
+
+
+def test_numbered_list_marker_style_is_configurable(tmp_path):
+    path = tmp_path / "paren_list.docx"
+    DocxRenderer(base_dir=tmp_path, numbered_list_marker="paren").render_to_file(
+        Document(
+            blocks=(
+                ListNode(
+                    list_type=ListType.NUMBERED,
+                    items=(ListItemNode("Первый пункт."), ListItemNode("Второй пункт.")),
+                ),
+            )
+        ),
+        get_profile("common"),
+        str(path),
+    )
+    doc = DocxDocument(str(path))
+
+    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "первый пункт;")
     assert _marker_texts_for_paragraph(doc, item)[0] == "%1)"
+
+
+def test_numbered_list_marker_rejects_unknown_style(tmp_path):
+    with pytest.raises(ValueError, match="Unknown numbered list marker"):
+        DocxRenderer(base_dir=tmp_path, numbered_list_marker="dash")
 
 
 def test_bullet_list_uses_en_dash_marker(tmp_path):
@@ -270,7 +353,7 @@ def test_bullet_list_uses_en_dash_marker(tmp_path):
         name="bullet_list.docx",
     )
 
-    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "Первый пункт.")
+    item = next(paragraph for paragraph in doc.paragraphs if paragraph.text == "первый пункт;")
     assert _marker_texts_for_paragraph(doc, item) == ["\u2013", "\u2013", "\u2013"]
 
 

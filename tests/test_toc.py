@@ -1,5 +1,6 @@
 from docx import Document as DocxDocument
 from docx.enum.style import WD_STYLE_TYPE
+from docx.oxml.ns import qn
 from docx.shared import Cm
 
 from sfu_converter.domain.ast_nodes import (
@@ -74,6 +75,19 @@ def test_renderer_inserts_toc_entries_with_required_indents(tmp_path):
     assert toc_entries[1].paragraph_format.first_line_indent == Cm(0)
     assert abs(toc_entries[0].paragraph_format.left_indent - Cm(0)) < 1000
     assert abs(toc_entries[1].paragraph_format.left_indent - Cm(0.5)) < 1000
+
+    # Indents are stored in the styles too: Word/LibreOffice rebuild TOC
+    # entries from them on refresh and drop direct paragraph formatting.
+    style_indent = doc.styles["TOC 2"].paragraph_format.left_indent
+    assert abs(style_indent - Cm(0.5)) < 1000
+
+    # The "СОДЕРЖАНИЕ" heading must not become a ToC entry on refresh.
+    toc_heading_style = doc.styles["SFUTOCHeading"]
+    p_pr = toc_heading_style.element.find(qn("w:pPr"))
+    assert p_pr is not None
+    outline = p_pr.find(qn("w:outlineLvl"))
+    assert outline is not None
+    assert outline.get(qn("w:val")) == "9"
 
 
 def test_coursework_course_work_uses_form_t_layout():

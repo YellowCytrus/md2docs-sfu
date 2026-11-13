@@ -28,7 +28,7 @@ def list_marker(list_type: ListType, index: int) -> str:
     if list_type is ListType.BULLET:
         return "-"
     if list_type is ListType.NUMBERED:
-        return f"{index + 1})"
+        return f"{index + 1}."
     if list_type is ListType.LETTERED:
         if 0 <= index < len(RUSSIAN_LIST_LETTERS):
             return f"{RUSSIAN_LIST_LETTERS[index]})"

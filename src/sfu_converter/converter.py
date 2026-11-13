@@ -5,11 +5,12 @@ from pathlib import Path
 
 from sfu_converter.application.convert import ConvertTextToDocx
 from sfu_converter.config import PathConfig, SIBFUConfig
-from sfu_converter.domain.constants import DEFAULT_PROFILE_NAME
 from sfu_converter.domain.ast_nodes import Document as AstDocument
+from sfu_converter.domain.constants import DEFAULT_PROFILE_NAME
 from sfu_converter.domain.diagnostics import Severity
 from sfu_converter.domain.formatting import FormattingProfile
 from sfu_converter.infrastructure.docx_renderer import DocxRenderer
+from sfu_converter.infrastructure.list_numbering import DEFAULT_NUMBERED_MARKER
 from sfu_converter.parser import DEFAULT_SYNTAX_VERSION, get_parser
 from sfu_converter.registry import get_profile
 
@@ -17,7 +18,12 @@ from sfu_converter.registry import get_profile
 class TextToDocxConverter:
     """Compatibility wrapper for TXT to DOCX conversion."""
 
-    def __init__(self, config_class=SIBFUConfig, base_dir=None):
+    def __init__(
+        self,
+        config_class=SIBFUConfig,
+        base_dir=None,
+        numbered_list_marker=DEFAULT_NUMBERED_MARKER,
+    ):
         self.config = config_class
         self.base_dir = Path(base_dir) if base_dir else Path.cwd()
         self.logger = logging.getLogger(__name__)
@@ -26,6 +32,7 @@ class TextToDocxConverter:
             config_class=self.config,
             base_dir=self.base_dir,
             logger=self.logger,
+            numbered_list_marker=numbered_list_marker,
         )
 
     @property

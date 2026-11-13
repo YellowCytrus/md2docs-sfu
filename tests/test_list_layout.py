@@ -22,7 +22,7 @@ def test_russian_letter_sequence_excludes_disallowed_letters():
 def test_list_marker_uses_standard_markers():
     assert list_marker(ListType.BULLET, 0) == "-"
     assert list_marker(ListType.LETTERED, 7) == "и)"
-    assert list_marker(ListType.NUMBERED, 1) == "2)"
+    assert list_marker(ListType.NUMBERED, 1) == "2."
 
 
 def test_nested_numeric_layout_is_half_centimeter_past_parent():

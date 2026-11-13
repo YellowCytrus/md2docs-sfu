@@ -4,14 +4,14 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.shared import Cm, Pt, RGBColor
 from PIL import Image
 
+import sfu_converter.infrastructure.docx_renderer as renderer_module
 from sfu_converter.config import SIBFUConfig
-from sfu_converter.infrastructure import docx_styles
 from sfu_converter.domain.ast_nodes import (
     AppendixNode,
     BibliographyEntryNode,
     Document,
-    FormulaNode,
     FigureNode,
+    FormulaNode,
     FrameType,
     HeadingLevel,
     HeadingNode,
@@ -34,15 +34,14 @@ from sfu_converter.domain.ast_nodes import (
     TableOfContentsNode,
     TableRow,
     TextRun,
-    TitlePageNode,
     TitleBlockForm,
+    TitlePageNode,
 )
 from sfu_converter.domain.diagnostics import DiagnosticCodes
 from sfu_converter.domain.formatting import FormattingProfile, FormattingRule, RuleSeverity, RuleStatus
+from sfu_converter.infrastructure import docx_styles
+from sfu_converter.infrastructure.docx_renderer import DocxRenderer, SectionNumberer, _normalize_list_item_text
 from sfu_converter.infrastructure.docx_validator import DocxValidator
-import sfu_converter.infrastructure.docx_renderer as renderer_module
-from sfu_converter.infrastructure.docx_renderer import DocxRenderer, SectionNumberer
-from sfu_converter.infrastructure.docx_renderer import _normalize_list_item_punctuation
 from sfu_converter.ports.renderer import RendererPort
 from sfu_converter.registry import get_profile
 
@@ -309,7 +308,7 @@ def test_docx_renderer_renders_list_items_with_sfu_markers_and_formatting(tmp_pa
         "- второй элемент.",
         "а) первый вариант;",
         "б) второй вариант.",
-        "1) подпункт один.",
+        "1) подпункт один;",
         "2) подпункт два.",
     ]
     for paragraph in paragraphs:
@@ -1203,8 +1202,58 @@ def test_docx_renderer_title_page_skip_and_helper_edges(tmp_path):
     with pytest.raises(ValueError, match="Unsupported list type"):
         renderer._list_item_text(object(), 0, "item", True)
 
-    assert _normalize_list_item_punctuation("", list_type=ListType.BULLET, is_last=False) == ""
+    assert _normalize_list_item_text("", list_type=ListType.BULLET, is_last=False) == ""
     assert (
-        _normalize_list_item_punctuation("done.", list_type=ListType.BULLET, is_last=False)
-        == "done."
+        _normalize_list_item_text("done.", list_type=ListType.BULLET, is_last=False)
+        == "done;"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "is_last", "expected"),
+    [
+        # Missing mark is added according to the position of the item.
+        ("первый пункт", False, "первый пункт;"),
+        ("первый пункт", True, "первый пункт."),
+        # An existing period is replaced, not duplicated.
+        ("первый пункт.", False, "первый пункт;"),
+        ("первый пункт.", True, "первый пункт."),
+        ("первый пункт;", False, "первый пункт;"),
+        ("первый пункт;", True, "первый пункт."),
+        ("первый пункт, ;", False, "первый пункт;"),
+        # The mark does not depend on the list type.
+        ("пункт", False, "пункт;"),
+        # The first letter is lowercased: the item continues its sentence.
+        ("Первый пункт", False, "первый пункт;"),
+        ("Первый пункт.", True, "первый пункт."),
+        ("Ёлка.", False, "ёлка;"),
+        # Acronyms, initials and single letters keep their case.
+        ("ГОСТ 7.5-07.", False, "ГОСТ 7.5-07;"),
+        ("СФУ — вуз.", False, "СФУ — вуз;"),
+        ("I этап.", False, "I этап;"),
+        ("Иванов И. И.", False, "Иванов И. И.;"),
+        # Text starting with a quote or a bracket is left as authored.
+        ("«Цитата».", False, "«Цитата»;"),
+        # Abbreviations keep their dot and still get the list mark.
+        ("и т.д.", False, "и т.д.;"),
+        ("и т.д.", True, "и т.д."),
+        ("См. др.", False, "см. др.;"),
+        # Abbreviations are not confused with a sentence period.
+        ("См. рис. 2.", False, "см. рис. 2;"),
+        # Terminal punctuation authored by the user is left alone.
+        ("Что дальше?", False, "что дальше?"),
+        ("Внимание!", True, "внимание!"),
+        ("Перечень:", False, "перечень:"),
+        ("и так далее…", False, "и так далее…"),
+        ("и так далее...", False, "и так далее..."),
+        # Empty items stay empty.
+        ("", False, ""),
+        ("   ", True, ""),
+        (".", False, "."),
+    ],
+)
+def test_list_item_text_is_lowercased_and_ends_with_semicolon_or_final_period(text, is_last, expected):
+    assert (
+        _normalize_list_item_text(text, list_type=ListType.NUMBERED, is_last=is_last)
+        == expected
     )

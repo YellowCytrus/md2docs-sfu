@@ -84,7 +84,13 @@ from sfu_converter.infrastructure.latex_math import (
     has_inline_math,
     split_inline_math,
 )
-from sfu_converter.infrastructure.list_numbering import apply_word_bibliography, apply_word_list
+from sfu_converter.infrastructure.list_numbering import (
+    DEFAULT_NUMBERED_MARKER,
+    NUMBERED_MARKERS,
+    apply_list_numbering,
+    apply_word_bibliography,
+    start_list_numbering,
+)
 from sfu_converter.infrastructure.numbering import NumberingContext, build_numbering_context
 from sfu_converter.infrastructure.page_numbering import (
     Location,
@@ -166,9 +172,21 @@ class SectionNumberer:
 class DocxRenderer(RendererPort):
     """python-docx renderer for the domain AST."""
 
-    def __init__(self, config_class=SIBFUConfig, base_dir=None, logger=None):
+    def __init__(
+        self,
+        config_class=SIBFUConfig,
+        base_dir=None,
+        logger=None,
+        numbered_list_marker: str = DEFAULT_NUMBERED_MARKER,
+    ):
+        if numbered_list_marker not in NUMBERED_MARKERS:
+            raise ValueError(
+                f"Unknown numbered list marker: {numbered_list_marker!r}; "
+                f"expected one of {', '.join(NUMBERED_MARKERS)}"
+            )
         self.config = config_class
         self.base_dir = Path(base_dir) if base_dir else Path.cwd()
+        self.numbered_list_marker = numbered_list_marker
         self.doc = None
         self.logger = logger or logging.getLogger(__name__)
         self._style_map = self._build_style_map()
@@ -1739,7 +1757,13 @@ class DocxRenderer(RendererPort):
 
     def _render_toc_entry(self, entry: TocEntry) -> None:
         paragraph = self.doc.add_paragraph(entry.rendered_text)
-        _apply_toc_style(self.doc, paragraph, entry.level)
+        _apply_toc_style(
+            self.doc,
+            paragraph,
+            entry.level,
+            left_indent_cm=entry.left_indent_cm,
+            tab_pos=self.config.FORMULA["number_tab_pos"],
+        )
         pf = paragraph.paragraph_format
         pf.first_line_indent = NO_INDENT_CM
         pf.left_indent = Cm(entry.left_indent_cm)
@@ -2095,6 +2119,7 @@ class DocxRenderer(RendererPort):
             self._rendered_body_blocks = True
 
     def _render_list(self, block, *, level: int = 0):
+        num_id = None
         for index, item in enumerate(block.items):
             if isinstance(item, ListNode):
                 self._render_list(item, level=level + 1)
@@ -2107,17 +2132,27 @@ class DocxRenderer(RendererPort):
             )
             p = self.doc.add_paragraph(text)
             self._set_paragraph_format(p, "list_item")
+            # Lists in the sources section keep the regular list look but count
+            # from 1 independently of the numbered lists in the body.
             if block.list_type is ListType.NUMBERED and self._in_bibliography_section:
                 apply_word_bibliography(p, document=self.doc)
             else:
-                apply_word_list(p, block.list_type, level=level, document=self.doc)
+                if num_id is None:
+                    # A fresh counter per list block: two adjacent lists must
+                    # both start at "1." instead of continuing each other.
+                    num_id = start_list_numbering(
+                        self.doc,
+                        block.list_type,
+                        marker=self.numbered_list_marker,
+                    )
+                apply_list_numbering(p, num_id, level=level)
             for child in item.children:
                 self._render_list(child, level=level + 1)
         if block.items:
             self._rendered_body_blocks = True
 
     def _list_item_text(self, list_type, index, item_text, is_last):
-        return _normalize_list_item_punctuation(
+        return _normalize_list_item_text(
             item_text,
             list_type=list_type,
             is_last=is_last,
@@ -2155,18 +2190,95 @@ def _is_sources_title(text: str | None) -> bool:
     }
 
 
-def _normalize_list_item_punctuation(
+#: Token that ends with a dot but is really an abbreviation ("и т.д.", "др."),
+#: not a sentence terminator. One or two letters before the dot is the reliable
+#: signal in Russian academic prose.
+_SHORT_TOKEN_BEFORE_DOT_RE = re.compile(r"(?:^|[^\wА-Яа-яЁё])([А-Яа-яЁёA-Za-z]{1,2})$")
+
+#: Punctuation that the author already used to end the item and that must not be
+#: followed by another mark (a question mark plus a semicolon reads as an error).
+_TERMINAL_PUNCTUATION = ("?", "!", ":", "…")
+
+#: The first word of a list item, used to tell an acronym from a regular word.
+_FIRST_WORD_RE = re.compile(r"[^\s,.;:!?—–-]+")
+
+#: The word after the first one, used to spot a proper name ("Иванов И. И.").
+_NEXT_WORD_RE = re.compile(r"[\s—–-]+([^\s,.;:!?—–-]+)")
+
+
+def _lowercase_first_letter(text: str) -> str:
+    """Lowercase the first letter of a list item unless it starts an acronym.
+
+    A list item continues the sentence that introduced it, so ``"Первый пункт"``
+    becomes ``"первый пункт"``. All-caps words of two or more letters
+    ("ГОСТ 7.5", "СФУ"), single letters ("I этап"), initials, a capitalised
+    second word ("Иванов И. И.") and items starting with a quote keep their case.
+    """
+
+    if not text:
+        return text
+    first = text[0]
+    if not first.isalpha() or not first.isupper():
+        return text
+
+    match = _FIRST_WORD_RE.match(text)
+    word = match.group(0) if match else first
+    letters = [char for char in word if char.isalpha()]
+    if len(letters) < 2 or word.isupper():
+        return text
+
+    next_word = _NEXT_WORD_RE.match(text[match.end() :] if match else "")
+    if next_word is not None and next_word.group(1)[:1].isupper():
+        # Two capitalised words in a row look like a proper name.
+        return text
+
+    return first.lower() + text[1:]
+
+
+def _normalize_list_item_text(
     text: str,
     *,
     list_type: ListType,
     is_last: bool,
 ) -> str:
-    stripped = text.strip()
-    if not stripped or stripped.endswith((".", ";")):
+    """Bring a list item to СТУ form: lowercase first letter, ``;`` / final ``.``.
+
+    A list item continues the sentence that introduced it, so its first letter
+    is lowercased (acronyms such as "ГОСТ" or "СФУ" keep their case). A period
+    that is already there is replaced by the required mark, so ``"Пункт."``
+    becomes ``"пункт;"`` mid-list and stays ``"пункт."`` when it is the final
+    item. ``list_type`` no longer changes the mark: bulleted, numbered and
+    lettered lists all follow the same rule.
+    """
+
+    stripped = _lowercase_first_letter(text.strip())
+    if not stripped:
         return stripped
 
-    ending = "." if list_type is ListType.NUMBERED or is_last else ";"
-    return f"{stripped}{ending}"
+    # Trailing commas / duplicate semicolons are always typos before a list mark.
+    body = stripped
+    while body and body[-1] in ";,":
+        body = body[:-1].rstrip()
+    if not body:
+        return stripped
+
+    if body.endswith(".."):
+        # Ellipsis: keep the dots the author wrote and add no other mark.
+        return body
+
+    if body.endswith("."):
+        head = body[:-1].rstrip()
+        if not head:
+            return stripped
+        if _SHORT_TOKEN_BEFORE_DOT_RE.search(head):
+            # The dot closes an abbreviation ("и т.д.", "др.") — keep it.
+            return body if is_last else f"{body};"
+        body = head
+
+    if body.endswith(_TERMINAL_PUNCTUATION):
+        return body
+
+    return f"{body}{'.' if is_last else ';'}"
 
 
 def _formula_latex_source(block) -> str | None:
@@ -2316,16 +2428,27 @@ def _is_generated_front_matter_block(block) -> bool:
     )
 
 
-def _apply_toc_style(document, paragraph, level: int) -> None:
+def _apply_toc_style(document, paragraph, level: int, *, left_indent_cm: float = 0.0, tab_pos=None) -> None:
     style_name = f"TOC {max(1, min(level, 6))}"
     try:
-        paragraph.style = document.styles[style_name]
-        return
+        style = document.styles[style_name]
     except KeyError:
-        pass
+        style = document.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
+        style.base_style = document.styles["Normal"]
 
-    style = document.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
-    style.base_style = document.styles["Normal"]
+    # Keep the indent in the *style* (not only on the paragraph): Word and
+    # LibreOffice rebuild TOC entries from these styles when the field is
+    # refreshed, so direct formatting would be lost on update.
+    pf = style.paragraph_format
+    pf.left_indent = Cm(left_indent_cm)
+    pf.first_line_indent = NO_INDENT_CM
+    pf.line_spacing = 1.0
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(0)
+    if tab_pos is not None:
+        pf.tab_stops.clear_all()
+        pf.tab_stops.add_tab_stop(tab_pos, WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+
     paragraph.style = style
 
 
