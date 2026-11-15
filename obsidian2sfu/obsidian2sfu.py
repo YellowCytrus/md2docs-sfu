@@ -100,6 +100,17 @@ DEFAULT_META = {
 #  Markdown -> V2 TXT
 # ======================================================================
 
+# Figure cross-references. A note may end an image line with ``@tag`` and use
+# the same ``@tag`` anywhere in the text; the tag is turned into the figure
+# number (``1.1``, ``А.2``, …) once every figure has been numbered. The
+# placeholders are characters that cannot occur in the source and survive the
+# inline-markdown normalisation untouched.
+_REF_TAG_RE = re.compile(r"@([\w-]+)", re.UNICODE)
+_REF_OPEN = "\ue000"
+_REF_CLOSE = "\ue001"
+_REF_TOKEN_RE = re.compile(_REF_OPEN + r"([\w-]+)" + _REF_CLOSE)
+
+
 def _esc(value: str) -> str:
     return value.replace('"', "'")
 
@@ -202,6 +213,14 @@ class MarkdownConverter:
         self.sources = list(config.get("sources", []))
         self.image_map: dict[str, Path] = {}
         self.figures = 0
+        # Figure numbering mirrors sfu-converter's section-based scheme:
+        # figures are `{H1}.{n}` and restart at every level-1 heading; inside
+        # an appendix they are `{letter}.{n}` and restart at every heading.
+        self.figure_refs: dict[str, str] = {}
+        self.unknown_refs: set[str] = set()
+        self._section_counter = 0
+        self._figure_counter = 0
+        self._appendix_letter: str | None = None
         vault = Path(config.get("vault", DEFAULT_VAULT)).expanduser()
         self.search_dirs = [vault, vault / config.get("attachment_folder", "attachments")]
 
@@ -227,11 +246,54 @@ class MarkdownConverter:
                 return safe
         return None
 
-    def _figure(self, out: list[str], target: str, caption: str, source_dir: Path) -> None:
+    # -- figure references --------------------------------------------
+    def refs(self, text: str) -> str:
+        """Hide ``@tag`` cross-references behind placeholders.
+
+        Replacement happens in :meth:`_resolve_refs` after the whole note has
+        been walked, so a reference may appear both before and after its
+        illustration.
+        """
+
+        return _REF_TAG_RE.sub(
+            lambda match: f"{_REF_OPEN}{match.group(1)}{_REF_CLOSE}",
+            text,
+        )
+
+    def _resolve_refs(self, text: str) -> str:
+        def replace(match: re.Match[str]) -> str:
+            tag = match.group(1)
+            number = self.figure_refs.get(tag)
+            if number is None:
+                self.unknown_refs.add(tag)
+                return "@" + tag
+            return number
+
+        return _REF_TOKEN_RE.sub(replace, text)
+
+    def _next_figure_number(self) -> str:
+        self._figure_counter += 1
+        if self._appendix_letter is not None:
+            return f"{self._appendix_letter}.{self._figure_counter}"
+        if self._section_counter:
+            return f"{self._section_counter}.{self._figure_counter}"
+        return str(self._figure_counter)
+
+    def _figure(
+        self,
+        out: list[str],
+        target: str,
+        caption: str,
+        source_dir: Path,
+        tag: str | None = None,
+    ) -> None:
         safe = self._register_image(target, source_dir)
         if not safe:
             out.append(f"[P] [Изображение не найдено: {target}]")
             return
+        number = self._next_figure_number()
+        if tag:
+            self.figure_refs[tag] = number
         attrs = [f'src="{_esc(safe)}"']
         if caption:
             attrs.append(f'caption="{_esc(caption)}"')
@@ -261,7 +323,7 @@ class MarkdownConverter:
         out.append("")
         out.append("[TABLE" + (" " + " ".join(attrs) if attrs else "") + "]")
         for r in body:
-            out.append("| " + " | ".join(self.fix(_cell(c)) for c in r) + " |")
+            out.append("| " + " | ".join(self.refs(self.fix(_cell(c))) for c in r) + " |")
         out.append("[TABLE_END]")
 
     # -- formulas -----------------------------------------------------
@@ -370,15 +432,31 @@ class MarkdownConverter:
                 i = display_math_end
                 continue
 
-            # image on its own line  ![[file|caption]] or ![caption](path)
-            m = re.match(r"^!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]$", stripped)
+            # image on its own line  ![[file|caption]] or ![caption](path),
+            # optionally followed by a reference tag:  ...![caption](path)@tag
+            m = re.match(
+                r"^!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*(?:@([\w-]+))?$",
+                stripped,
+            )
             if m:
-                self._figure(out, m.group(1).strip(), (m.group(2) or "").strip(), source_dir)
+                self._figure(
+                    out,
+                    m.group(1).strip(),
+                    (m.group(2) or "").strip(),
+                    source_dir,
+                    tag=m.group(3),
+                )
                 i += 1
                 continue
-            m = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)$", stripped)
+            m = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)\s*(?:@([\w-]+))?$", stripped)
             if m:
-                self._figure(out, m.group(2).strip(), m.group(1).strip(), source_dir)
+                self._figure(
+                    out,
+                    m.group(2).strip(),
+                    m.group(1).strip(),
+                    source_dir,
+                    tag=m.group(3),
+                )
                 i += 1
                 continue
 
@@ -417,6 +495,8 @@ class MarkdownConverter:
                     out.append("")
                     out.append(f'[APPENDIX id=app:{letter.lower()} letter="{letter}" title="{_esc(full)}"]')
                     in_appendix = True
+                    self._appendix_letter = letter
+                    self._figure_counter = 0
                     i += 1
                     continue
                 if key in STRUCTURAL_TITLES:
@@ -439,9 +519,15 @@ class MarkdownConverter:
                 level = min(level, 6)
                 out.append("")
                 if in_appendix:
-                    out.append(f'[H level={level} title="{_esc(title)}"]')
+                    out.append(f'[H level={level} title="{_esc(self.refs(title))}"]')
+                    # The renderer resets element counters on every heading
+                    # inside an appendix (the scope is the appendix letter).
+                    self._figure_counter = 0
                 else:
-                    out.append(f'[H level={level} title="{_esc(title)}" number=auto]')
+                    out.append(f'[H level={level} title="{_esc(self.refs(title))}" number=auto]')
+                    if level == 1:
+                        self._section_counter += 1
+                        self._figure_counter = 0
                 i += 1
                 continue
 
@@ -460,7 +546,7 @@ class MarkdownConverter:
                 out.append("[LIST type=bullet]")
                 while i < n and re.match(r"^[-*+]\s+", lines[i].strip()):
                     item = re.sub(r"^[-*+]\s+", "", lines[i].strip())
-                    out.append(f"[-] {_plain(self.fix(item))}")
+                    out.append(f"[-] {self.refs(_plain(self.fix(item)))}")
                     i += 1
                 out.append("[LIST_END]")
                 continue
@@ -471,7 +557,7 @@ class MarkdownConverter:
                 out.append("[LIST type=numbered]")
                 while i < n and re.match(r"^\d+[.)]\s+", lines[i].strip()):
                     item = re.sub(r"^\d+[.)]\s+", "", lines[i].strip())
-                    out.append(f"[1)] {_plain(self.fix(item))}")
+                    out.append(f"[1)] {self.refs(_plain(self.fix(item)))}")
                     i += 1
                 out.append("[LIST_END]")
                 continue
@@ -480,7 +566,7 @@ class MarkdownConverter:
             if stripped.startswith(">"):
                 text_line = stripped.lstrip(">").strip()
                 out.append("")
-                out.append("[P] " + _inline(self.fix(text_line)))
+                out.append("[P] " + self.refs(_inline(self.fix(text_line))))
                 i += 1
                 continue
 
@@ -510,13 +596,13 @@ class MarkdownConverter:
                 parts.append(nxt)
                 i += 1
             out.append("")
-            out.append("[P] " + _inline(self.fix(" ".join(parts))))
+            out.append("[P] " + self.refs(_inline(self.fix(" ".join(parts)))))
 
         # sources without appendices -> emit at the end (unless the note has its own)
         if self.sources and not sources_done and not note_has_sources:
             self.emit_sources(out)
 
-        return "\n".join(out).rstrip() + "\n"
+        return self._resolve_refs("\n".join(out).rstrip() + "\n")
 
 
 # ======================================================================
@@ -1765,6 +1851,9 @@ def main() -> None:
     # 1. markdown -> V2 txt
     converter = MarkdownConverter(cfg)
     txt_path.write_text(converter.convert(md.read_text(encoding="utf-8"), md.parent), encoding="utf-8")
+    if converter.unknown_refs:
+        tags = ", ".join("@" + tag for tag in sorted(converter.unknown_refs))
+        print(f"warning: unknown figure reference(s): {tags}", file=sys.stderr)
     print(f"[1/4] TXT written: {txt_path}")
 
     # 2. copy referenced images next to the output so the converter finds them
